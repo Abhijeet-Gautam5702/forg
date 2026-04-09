@@ -1,5 +1,5 @@
 use clap::Parser;
-use regex::Regex;
+use regex::{Regex, RegexBuilder};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -15,12 +15,18 @@ use std::{
 struct Cli {
     #[arg(long)]
     init: bool,
+
     #[arg(long)]
     exec: Option<String>,
+
     #[arg(long, default_value_t = false)]
     dry_run: bool,
+
     #[arg(long, default_value_t = false)]
     allow_hidden: bool,
+
+    #[arg(long, default_value_t = false)]
+    ignore_case: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -66,7 +72,7 @@ pub fn main() -> Result<()> {
         }
 
         // Print Mode Disclaimers
-        if cli.dry_run || cli.allow_hidden {
+        if cli.dry_run || cli.allow_hidden || cli.ignore_case {
             println!("--------------------------------------------");
             if cli.dry_run {
                 println!("DRY RUN ENABLED: No files will actually be moved.");
@@ -75,6 +81,9 @@ pub fn main() -> Result<()> {
                 println!(
                     "ALLOW HIDDEN: System/hidden files (starting with '.') will be processed."
                 );
+            }
+            if cli.ignore_case {
+                println!("IGNORE CASE: Regex matching will be case-insensitive.");
             }
             println!("--------------------------------------------");
         }
@@ -86,16 +95,18 @@ pub fn main() -> Result<()> {
         })?;
 
         // Optimization: Pre-compile directory map with regex objects
-        // Note: regex operation is expensive => no need to create regex objects when traversing the files in target folder.
         let mut directory_map: HashMap<String, (Regex, PathBuf)> = HashMap::new();
         for config_item in &config_json {
             let folder_complete_path = home.join(&config_item.path);
-            let pattern_regex = Regex::new(&config_item.pattern).map_err(|e| {
-                Error::new(
-                    ErrorKind::InvalidInput,
-                    format!("Invalid regex '{}': {}", config_item.pattern, e),
-                )
-            })?;
+            let pattern_regex = RegexBuilder::new(&config_item.pattern)
+                .case_insensitive(cli.ignore_case)
+                .build()
+                .map_err(|e| {
+                    Error::new(
+                        ErrorKind::InvalidInput,
+                        format!("Invalid regex '{}': {}", config_item.pattern, e),
+                    )
+                })?;
             directory_map.insert(
                 config_item.pattern.clone(),
                 (pattern_regex, folder_complete_path),
@@ -153,14 +164,25 @@ pub fn main() -> Result<()> {
                                     }
                                 }
 
-                                println!(
-                                    "{}) {} -> {}",
-                                    moved_count + 1,
-                                    filename_str,
-                                    dest_dir.display()
-                                );
+                                // File overwrite protection:
+                                // skip moving file if filename already exists in destination folder
+                                if to_path.exists() {
+                                    failed_files.push((
+                                        filename_str.to_string(),
+                                        String::from("filename already exists"),
+                                    ));
+                                    continue;
+                                }
                                 match fs::rename(&from_path, &to_path) {
-                                    Ok(_) => moved_count += 1,
+                                    Ok(_) => {
+                                        println!(
+                                            "{}) {} -> {}",
+                                            moved_count + 1,
+                                            filename_str,
+                                            dest_dir.display()
+                                        );
+                                        moved_count += 1;
+                                    }
                                     Err(e) => {
                                         failed_files.push((filename_str.to_string(), e.to_string()))
                                     }
@@ -177,9 +199,9 @@ pub fn main() -> Result<()> {
         } else {
             println!("\nTotal Files Moved: {}", moved_count);
             if !failed_files.is_empty() {
-                println!("\n❌ Errors occurred for the following files:");
+                println!("\nErrors occurred for the following files:");
                 for (file, error) in failed_files {
-                    println!("  - {}: {}", file, error);
+                    println!(" - {}: {}", file, error);
                 }
             }
         }
