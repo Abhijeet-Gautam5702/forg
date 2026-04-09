@@ -1,10 +1,11 @@
 use clap::Parser;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     env, fs,
-    io::Result,
-    path::{Path, PathBuf},
+    io::{Error, Result},
+    path::PathBuf,
 };
 
 // CLI TOOL
@@ -37,7 +38,7 @@ struct Cli {
     #[arg(long)]
     init: bool,
     #[arg(long)]
-    exec: String,
+    exec: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -91,7 +92,7 @@ pub fn main() -> Result<()> {
             }
             None => println!("Home directory not found"),
         }
-    } else {
+    } else if let Some(target_dir) = cli.exec {
         // check if the directory exists
         match env::home_dir() {
             Some(path) => {
@@ -116,23 +117,50 @@ pub fn main() -> Result<()> {
 
                 // start organising files into designated paths
                 println!("organising files into designated paths...");
-                // pattern-directory map
-                let mut directory_map: HashMap<String, PathBuf> = HashMap::new();
+                // pattern-directory map || pattern -> (pattern-regex, directory path)
+                let mut directory_map: HashMap<String, (Regex, PathBuf)> = HashMap::new();
                 for config_item in &config_json {
                     let folder_complete_path = PathBuf::from(path.join(&config_item.path));
                     let pattern = &config_item.pattern;
-                    directory_map.insert(String::from(pattern), folder_complete_path);
+                    let pattern_regex = Regex::new(pattern).unwrap();
+                    directory_map
+                        .insert(String::from(pattern), (pattern_regex, folder_complete_path));
                 }
                 println!("directory_map: {:?}", directory_map);
                 // check if the target folder exists and iterate files inside
-                let target_path = PathBuf::from(path.join(cli.exec));
+                let target_path = PathBuf::from(path.join(target_dir));
                 println!("target_folder {}", target_path.display());
                 if !target_path.exists() {
                     panic!("No such directory found: {}", target_path.display())
                 }
+                let paths = fs::read_dir(target_path)?;
+                for entry in paths {
+                    let entry = entry?;
+                    if entry.file_type()?.is_file() {
+                        println!("path: {}", entry.path().display());
+                        for (_, (pattern_regex, dir)) in &directory_map {
+                            fs::create_dir_all(dir)?; // create the destination directory if needed
+                            if let Some(filename_str) = entry.file_name().to_str() {
+                                if pattern_regex.is_match(filename_str) {
+                                    // move the file to destination directory
+                                    let from_filepath = &entry.path();
+                                    let to_filpath = dir.join(filename_str);
+                                    println!(
+                                        "moving from {} -> {}",
+                                        from_filepath.display(),
+                                        to_filpath.display()
+                                    );
+                                    fs::rename(from_filepath, to_filpath)?;
+                                }
+                            }
+                        }
+                    }
+                }
             }
             None => panic!("utility no initialised. run forg --init then try again."),
         }
+    } else {
+        println!("Please provide an option. Use --help for info.")
     }
 
     Ok(())

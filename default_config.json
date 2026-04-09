@@ -1,14 +1,14 @@
 [
   {
-    "pattern": "*.png",
-    "path": "/Pictures"
+    "pattern": ".*\\.(png|jpeg|jpg)$",
+    "path": "test-forg-dir/Pictures"
   },
   {
-    "pattern": "*.dmg",
-    "path": "/Downloads/DMGs"
+    "pattern": ".*\\.(txt|pdf)$",
+    "path": "test-forg-dir/Documents"
   },
   {
-    "pattern": "*.txt",
-    "path": "/Documents"
+    "pattern": ".*\\.dmg$",
+    "path": "test-forg-dir/DMGs"
   }
 ]
