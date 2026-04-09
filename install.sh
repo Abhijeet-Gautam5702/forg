@@ -4,7 +4,7 @@ set -e
 REPO="Abhijeet-Gautam5702/forg"
 BINARY_NAME="forg"
 
-# Detect architecture
+# Detect architecture of the system
 ARCH=$(uname -m)
 
 if [[ "$ARCH" == "arm64" ]]; then
