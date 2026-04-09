@@ -165,7 +165,7 @@ pub fn main() -> Result<()> {
 
                             // skip same directory move
                             if to_path == from_path {
-                                continue;
+                                break;
                             }
 
                             if cli.dry_run {
