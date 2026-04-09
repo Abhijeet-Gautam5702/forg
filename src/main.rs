@@ -17,6 +17,8 @@ struct Cli {
     init: bool,
     #[arg(long)]
     exec: Option<String>,
+    #[arg(long)]
+    dry_run: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -27,6 +29,8 @@ struct ConfigItem {
 
 pub fn main() -> Result<()> {
     let cli = Cli::parse();
+
+    let dry_run = cli.dry_run;
 
     // Get home directory and config path once
     let home = env::home_dir()
@@ -61,13 +65,14 @@ pub fn main() -> Result<()> {
             ));
         }
 
-        // Read and parse config
+        // Read and parse config (to get patterns and paths)
         let config_data_str = fs::read_to_string(&config_path)?;
         let config_json: Vec<ConfigItem> = serde_json::from_str(&config_data_str).map_err(|e| {
             Error::new(ErrorKind::InvalidData, format!("Config parse error: {}", e))
         })?;
 
-        // Pre-compile directory map for performance
+        // Optimization: Pre-compile directory map with regex objects
+        // Note: regex operation is expensive => no need to create regex objects when traversing the files in target folder.
         let mut directory_map: HashMap<String, (Regex, PathBuf)> = HashMap::new();
         for config_item in &config_json {
             let folder_complete_path = home.join(&config_item.path);
@@ -94,11 +99,21 @@ pub fn main() -> Result<()> {
             ));
         }
 
-        println!("Scanning: {}", target_path.display());
+        if dry_run {
+            println!(":::: RUNNING IN DRY-RUN MODE ::::");
+        } else {
+            println!(":::: RUNNING IN EXECUTION MODE ::::");
+        }
+        println!("\nScanning: {}", target_path.display());
 
         let entries = fs::read_dir(target_path)?;
         let mut moved_count = 0;
 
+        if dry_run {
+            println!("\nThe following files will be moved...\n")
+        } else {
+            println!("\nMoving files...\n")
+        }
         for entry in entries {
             let entry = entry?;
             if entry.file_type()?.is_file() {
@@ -106,23 +121,41 @@ pub fn main() -> Result<()> {
                     for (_, (pattern_regex, dest_dir)) in &directory_map {
                         if pattern_regex.is_match(filename_str) {
                             // Optimization: Only create directory when a match is actually found
-                            if !dest_dir.exists() {
+                            if !dest_dir.exists() && !dry_run {
                                 fs::create_dir_all(dest_dir)?;
                             }
 
                             let from_path = entry.path();
                             let to_path = dest_dir.join(filename_str);
 
-                            println!("Moving: {} -> {}", filename_str, dest_dir.display());
-                            fs::rename(from_path, to_path)?;
+                            if !dry_run {
+                                println!(
+                                    "{}) Moving: {} -> {}",
+                                    moved_count + 1,
+                                    filename_str,
+                                    dest_dir.display()
+                                );
+                                fs::rename(from_path, to_path)?;
+                            } else {
+                                println!(
+                                    "{}) {} -> {}",
+                                    moved_count + 1,
+                                    filename_str,
+                                    dest_dir.display()
+                                )
+                            }
                             moved_count += 1;
-                            break; // Bug Fix: Stop checking other patterns once file is moved
+                            break; // Stop checking other patterns once file is moved
                         }
                     }
                 }
             }
         }
-        println!("Done! Moved {} files.", moved_count);
+        if dry_run {
+            println!("\nTotal Files To Be Moved: {}", moved_count);
+        } else {
+            println!("\nTotal Files Moved: {}", moved_count);
+        }
     } else {
         println!("Please provide an option. Use --help for info.");
     }
