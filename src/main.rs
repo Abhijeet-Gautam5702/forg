@@ -163,6 +163,11 @@ pub fn main() -> Result<()> {
                             let from_path = entry.path();
                             let to_path = dest_dir.join(filename_str);
 
+                            // skip same directory move
+                            if to_path == from_path {
+                                continue;
+                            }
+
                             if cli.dry_run {
                                 println!(
                                     "{}) Would move: {} -> {}",
