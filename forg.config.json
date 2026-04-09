@@ -1,0 +1,10 @@
+[
+  {
+    "path": "/Users/abhijeet/Downloads/pngs",
+    "pattern": "*.png"
+  },
+  {
+    "path": "/Users/abhijeet/Downloads/dmgs",
+    "pattern": "*.dmg"
+  }
+]

@@ -1,0 +1,14 @@
+[
+  {
+    "pattern": "*.png",
+    "path": "/Pictures"
+  },
+  {
+    "pattern": "*.dmg",
+    "path": "/Downloads/DMGs"
+  },
+  {
+    "pattern": "*.txt",
+    "path": "/Documents"
+  }
+]
