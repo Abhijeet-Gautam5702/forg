@@ -4,31 +4,9 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     env, fs,
-    io::{Error, Result},
+    io::{Error, ErrorKind, Result},
     path::PathBuf,
 };
-
-// CLI TOOL
-// forg --init => create a .forg/forg.config file
-// sample forg.config file
-/*
- * [
- *  {
- *      "pattern": "*.png",
- *      "path": "/home/abhijeet/Pictures/Screenshots"
- *  },
- *  {
- *      "pattern": "*.txt",
- *      "path": "/home/abhijeet/Documents"
- *  },
- * ]
- *
- */
-// forg --exec ./Downloads
-// - scans ./Downloads directory
-// - move all the files (not directories) to their respective paths
-// - if directories in path don't exist, create them and then move
-//
 
 #[derive(Parser)]
 #[command(name = "forg")]
@@ -49,118 +27,104 @@ struct ConfigItem {
 
 pub fn main() -> Result<()> {
     let cli = Cli::parse();
-    // println!("init: {:?}", cli.init);
-    // println!("exec: {:?}", cli.exec);
 
-    // if init == true => create forg.config file in ~/.forg/config.json
-    if cli.init == true {
-        // check if the directory exists
-        match env::home_dir() {
-            Some(path) => {
-                let mut forg_dir_path = PathBuf::from(&path);
-                forg_dir_path.push(".forg");
+    // Get home directory and config path once
+    let home = env::home_dir()
+        .ok_or_else(|| Error::new(ErrorKind::NotFound, "Home directory not found"))?;
+    let mut forg_dir_path = home.clone();
+    forg_dir_path.push(".forg");
+    let config_path = forg_dir_path.join("config.json");
 
-                if !forg_dir_path.exists() {
-                    // create .forg directory & default config.json
-                    fs::create_dir_all(&forg_dir_path)?;
+    if cli.init {
+        if !forg_dir_path.exists() {
+            fs::create_dir_all(&forg_dir_path)?;
+        }
 
-                    // config file
-                    let config_path = forg_dir_path.join("config.json");
-                    fs::File::create_new(&config_path)?;
-
-                    // default config file
-                    let default_config_path = PathBuf::from("default_config.json");
-                    if !default_config_path.exists() {
-                        panic!("default config file not exists")
-                    }
-
-                    // copy contents from default config -> config (newly created)
-                    fs::copy(default_config_path, config_path)?;
-                }
-
-                // read the config.json
-                let config_path = forg_dir_path.join("config.json");
-                if !config_path.exists() {
-                    panic!(
-                        "Unknown error: config_path for {} undefined. run forg --init and try again.",
-                        config_path.display()
-                    )
-                }
-                let config_data_str = fs::read_to_string(&config_path)?;
-                let config_json: Vec<ConfigItem> = serde_json::from_str(config_data_str.as_str())?;
-                println!("config_json: {:?}", config_json);
+        if !config_path.exists() {
+            let default_config_path = PathBuf::from("default_config.json");
+            if !default_config_path.exists() {
+                return Err(Error::new(
+                    ErrorKind::NotFound,
+                    "default_config.json not found in current directory",
+                ));
             }
-            None => println!("Home directory not found"),
+            fs::copy(default_config_path, &config_path)?;
+            println!("Initialised: Config created at {}", config_path.display());
+        } else {
+            println!("Already initialised at {}", config_path.display());
         }
     } else if let Some(target_dir) = cli.exec {
-        // check if the directory exists
-        match env::home_dir() {
-            Some(path) => {
-                let mut forg_dir_path = PathBuf::from(&path);
-                forg_dir_path.push(".forg");
+        if !config_path.exists() {
+            return Err(Error::new(
+                ErrorKind::NotFound,
+                "Utility not initialised. Run 'forg --init' first.",
+            ));
+        }
 
-                if !forg_dir_path.exists() {
-                    panic!("unitility not initialised properly. run forg --init then try again.")
-                }
+        // Read and parse config
+        let config_data_str = fs::read_to_string(&config_path)?;
+        let config_json: Vec<ConfigItem> = serde_json::from_str(&config_data_str).map_err(|e| {
+            Error::new(ErrorKind::InvalidData, format!("Config parse error: {}", e))
+        })?;
 
-                // read the config.json
-                let config_path = forg_dir_path.join("config.json");
-                if !config_path.exists() {
-                    panic!(
-                        "Unknown error: config_path for {} undefined. run forg --init and try again.",
-                        config_path.display()
-                    )
-                }
-                let config_data_str = fs::read_to_string(&config_path)?;
-                let config_json: Vec<ConfigItem> = serde_json::from_str(config_data_str.as_str())?;
-                println!("config_json: {:?}", config_json);
+        // Pre-compile directory map for performance
+        let mut directory_map: HashMap<String, (Regex, PathBuf)> = HashMap::new();
+        for config_item in &config_json {
+            let folder_complete_path = home.join(&config_item.path);
+            let pattern_regex = Regex::new(&config_item.pattern).map_err(|e| {
+                Error::new(
+                    ErrorKind::InvalidInput,
+                    format!("Invalid regex '{}': {}", config_item.pattern, e),
+                )
+            })?;
+            directory_map.insert(
+                config_item.pattern.clone(),
+                (pattern_regex, folder_complete_path),
+            );
+        }
 
-                // start organising files into designated paths
-                println!("organising files into designated paths...");
-                // pattern-directory map || pattern -> (pattern-regex, directory path)
-                let mut directory_map: HashMap<String, (Regex, PathBuf)> = HashMap::new();
-                for config_item in &config_json {
-                    let folder_complete_path = PathBuf::from(path.join(&config_item.path));
-                    let pattern = &config_item.pattern;
-                    let pattern_regex = Regex::new(pattern).unwrap();
-                    directory_map
-                        .insert(String::from(pattern), (pattern_regex, folder_complete_path));
-                }
-                println!("directory_map: {:?}", directory_map);
-                // check if the target folder exists and iterate files inside
-                let target_path = PathBuf::from(path.join(target_dir));
-                println!("target_folder {}", target_path.display());
-                if !target_path.exists() {
-                    panic!("No such directory found: {}", target_path.display())
-                }
-                let paths = fs::read_dir(target_path)?;
-                for entry in paths {
-                    let entry = entry?;
-                    if entry.file_type()?.is_file() {
-                        println!("path: {}", entry.path().display());
-                        for (_, (pattern_regex, dir)) in &directory_map {
-                            fs::create_dir_all(dir)?; // create the destination directory if needed
-                            if let Some(filename_str) = entry.file_name().to_str() {
-                                if pattern_regex.is_match(filename_str) {
-                                    // move the file to destination directory
-                                    let from_filepath = &entry.path();
-                                    let to_filpath = dir.join(filename_str);
-                                    println!(
-                                        "moving from {} -> {}",
-                                        from_filepath.display(),
-                                        to_filpath.display()
-                                    );
-                                    fs::rename(from_filepath, to_filpath)?;
-                                }
+        let target_path = home.join(target_dir);
+        if !target_path.exists() {
+            return Err(Error::new(
+                ErrorKind::NotFound,
+                format!(
+                    "Target directory (--exec <DIR_PATH>) not found: {}",
+                    target_path.display()
+                ),
+            ));
+        }
+
+        println!("Scanning: {}", target_path.display());
+
+        let entries = fs::read_dir(target_path)?;
+        let mut moved_count = 0;
+
+        for entry in entries {
+            let entry = entry?;
+            if entry.file_type()?.is_file() {
+                if let Some(filename_str) = entry.file_name().to_str() {
+                    for (_, (pattern_regex, dest_dir)) in &directory_map {
+                        if pattern_regex.is_match(filename_str) {
+                            // Optimization: Only create directory when a match is actually found
+                            if !dest_dir.exists() {
+                                fs::create_dir_all(dest_dir)?;
                             }
+
+                            let from_path = entry.path();
+                            let to_path = dest_dir.join(filename_str);
+
+                            println!("Moving: {} -> {}", filename_str, dest_dir.display());
+                            fs::rename(from_path, to_path)?;
+                            moved_count += 1;
+                            break; // Bug Fix: Stop checking other patterns once file is moved
                         }
                     }
                 }
             }
-            None => panic!("utility no initialised. run forg --init then try again."),
         }
+        println!("Done! Moved {} files.", moved_count);
     } else {
-        println!("Please provide an option. Use --help for info.")
+        println!("Please provide an option. Use --help for info.");
     }
 
     Ok(())
