@@ -17,8 +17,10 @@ struct Cli {
     init: bool,
     #[arg(long)]
     exec: Option<String>,
-    #[arg(long)]
+    #[arg(long, default_value_t = false)]
     dry_run: bool,
+    #[arg(long, default_value_t = false)]
+    allow_hidden: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -30,9 +32,7 @@ struct ConfigItem {
 pub fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    let dry_run = cli.dry_run;
-
-    // Get home directory and config path once
+    // Get home directory and config path
     let home = env::home_dir()
         .ok_or_else(|| Error::new(ErrorKind::NotFound, "Home directory not found"))?;
     let mut forg_dir_path = home.clone();
@@ -65,7 +65,21 @@ pub fn main() -> Result<()> {
             ));
         }
 
-        // Read and parse config (to get patterns and paths)
+        // Print Mode Disclaimers
+        if cli.dry_run || cli.allow_hidden {
+            println!("--------------------------------------------");
+            if cli.dry_run {
+                println!("DRY RUN ENABLED: No files will actually be moved.");
+            }
+            if cli.allow_hidden {
+                println!(
+                    "ALLOW HIDDEN: System/hidden files (starting with '.') will be processed."
+                );
+            }
+            println!("--------------------------------------------");
+        }
+
+        // Read and parse config
         let config_data_str = fs::read_to_string(&config_path)?;
         let config_json: Vec<ConfigItem> = serde_json::from_str(&config_data_str).map_err(|e| {
             Error::new(ErrorKind::InvalidData, format!("Config parse error: {}", e))
@@ -99,62 +113,75 @@ pub fn main() -> Result<()> {
             ));
         }
 
-        if dry_run {
-            println!(":::: RUNNING IN DRY-RUN MODE ::::");
-        } else {
-            println!(":::: RUNNING IN EXECUTION MODE ::::");
-        }
         println!("\nScanning: {}", target_path.display());
 
         let entries = fs::read_dir(target_path)?;
         let mut moved_count = 0;
+        let mut failed_files: Vec<(String, String)> = Vec::new();
 
-        if dry_run {
-            println!("\nThe following files will be moved...\n")
-        } else {
-            println!("\nMoving files...\n")
-        }
         for entry in entries {
             let entry = entry?;
             if entry.file_type()?.is_file() {
                 if let Some(filename_str) = entry.file_name().to_str() {
+                    // Skip hidden files if not allowed
+                    if !cli.allow_hidden && filename_str.starts_with('.') {
+                        continue;
+                    }
+
                     for (_, (pattern_regex, dest_dir)) in &directory_map {
                         if pattern_regex.is_match(filename_str) {
-                            // Optimization: Only create directory when a match is actually found
-                            if !dest_dir.exists() && !dry_run {
-                                fs::create_dir_all(dest_dir)?;
-                            }
-
                             let from_path = entry.path();
                             let to_path = dest_dir.join(filename_str);
 
-                            if !dry_run {
+                            if cli.dry_run {
                                 println!(
-                                    "{}) Moving: {} -> {}",
+                                    "{}) Would move: {} -> {}",
                                     moved_count + 1,
                                     filename_str,
                                     dest_dir.display()
                                 );
-                                fs::rename(from_path, to_path)?;
+                                moved_count += 1;
                             } else {
+                                // Optimization: Only create directory when a match is actually found
+                                if !dest_dir.exists() {
+                                    if let Err(e) = fs::create_dir_all(dest_dir) {
+                                        failed_files.push((
+                                            filename_str.to_string(),
+                                            format!("Failed to create dir: {}", e),
+                                        ));
+                                        break;
+                                    }
+                                }
+
                                 println!(
                                     "{}) {} -> {}",
                                     moved_count + 1,
                                     filename_str,
                                     dest_dir.display()
-                                )
+                                );
+                                match fs::rename(&from_path, &to_path) {
+                                    Ok(_) => moved_count += 1,
+                                    Err(e) => {
+                                        failed_files.push((filename_str.to_string(), e.to_string()))
+                                    }
+                                }
                             }
-                            moved_count += 1;
-                            break; // Stop checking other patterns once file is moved
+                            break;
                         }
                     }
                 }
             }
         }
-        if dry_run {
+        if cli.dry_run {
             println!("\nTotal Files To Be Moved: {}", moved_count);
         } else {
             println!("\nTotal Files Moved: {}", moved_count);
+            if !failed_files.is_empty() {
+                println!("\n❌ Errors occurred for the following files:");
+                for (file, error) in failed_files {
+                    println!("  - {}: {}", file, error);
+                }
+            }
         }
     } else {
         println!("Please provide an option. Use --help for info.");
