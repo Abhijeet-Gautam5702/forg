@@ -28,6 +28,7 @@ tar -xzf "$FILE"
 EXTRACTED_FILE="${FILE%.tar.gz}"
 chmod +x "$EXTRACTED_FILE"
 mv "$EXTRACTED_FILE" "$BINARY_NAME"
+rm "$FILE"
 
 chmod +x "$BINARY_NAME"
 
