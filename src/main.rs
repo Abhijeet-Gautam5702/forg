@@ -2,7 +2,6 @@ use clap::Parser;
 use regex::{Regex, RegexBuilder};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::HashMap,
     env, fs,
     io::{Error, ErrorKind, Result},
     path::PathBuf,
@@ -94,8 +93,8 @@ pub fn main() -> Result<()> {
             Error::new(ErrorKind::InvalidData, format!("Config parse error: {}", e))
         })?;
 
-        // Optimization: Pre-compile directory map with regex objects
-        let mut directory_map: HashMap<String, (Regex, PathBuf)> = HashMap::new();
+        // Pre-compile rules with regex objects in a Vector to preserve order (priority preservation)
+        let mut rules: Vec<(Regex, PathBuf)> = Vec::new();
         for config_item in &config_json {
             let folder_complete_path = home.join(&config_item.path);
             let pattern_regex = RegexBuilder::new(&config_item.pattern)
@@ -107,10 +106,7 @@ pub fn main() -> Result<()> {
                         format!("Invalid regex '{}': {}", config_item.pattern, e),
                     )
                 })?;
-            directory_map.insert(
-                config_item.pattern.clone(),
-                (pattern_regex, folder_complete_path),
-            );
+            rules.push((pattern_regex, folder_complete_path));
         }
 
         let target_path = home.join(target_dir);
@@ -139,7 +135,8 @@ pub fn main() -> Result<()> {
                         continue;
                     }
 
-                    for (_, (pattern_regex, dest_dir)) in &directory_map {
+                    // match pattern against the rules
+                    for (pattern_regex, dest_dir) in &rules {
                         if pattern_regex.is_match(filename_str) {
                             let from_path = entry.path();
                             let to_path = dest_dir.join(filename_str);
@@ -152,7 +149,9 @@ pub fn main() -> Result<()> {
                                     dest_dir.display()
                                 );
                                 moved_count += 1;
-                            } else {
+                            }
+                            // move to desstination folder
+                            else {
                                 // Optimization: Only create directory when a match is actually found
                                 if !dest_dir.exists() {
                                     if let Err(e) = fs::create_dir_all(dest_dir) {
@@ -165,11 +164,10 @@ pub fn main() -> Result<()> {
                                 }
 
                                 // File overwrite protection:
-                                // skip moving file if filename already exists in destination folder
                                 if to_path.exists() {
                                     failed_files.push((
                                         filename_str.to_string(),
-                                        String::from("filename already exists"),
+                                        String::from("filename already exists in destination"),
                                     ));
                                     continue;
                                 }
@@ -188,7 +186,8 @@ pub fn main() -> Result<()> {
                                     }
                                 }
                             }
-                            break;
+
+                            break; // Stop checking other patterns once the first match is found (Priority)
                         }
                     }
                 }
