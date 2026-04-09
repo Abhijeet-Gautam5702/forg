@@ -12,19 +12,41 @@ use std::{
 #[command(version = "1.0")]
 #[command(about = "Organises files into designated folders automatically", long_about = None)]
 struct Cli {
-    #[arg(long)]
+    #[arg(
+        short,
+        long,
+        help = "Initialise the utility by creating a config file in ~/.forg/config.json (to be run only once in the beginning)"
+    )]
     init: bool,
 
-    #[arg(long)]
+    #[arg(
+        short,
+        long,
+        value_name = "DIR_PATH",
+        help = "Organise files in the specified directory (relative to home)"
+    )]
     exec: Option<String>,
 
-    #[arg(long, default_value_t = false)]
+    #[arg(
+        short('d'),
+        long,
+        default_value_t = false,
+        help = "Preview the changes without moving any files"
+    )]
     dry_run: bool,
 
-    #[arg(long, default_value_t = false)]
+    #[arg(
+        long,
+        default_value_t = false,
+        help = "**POTENTIALLY SYSTEM BREAKING**: Allow processing of hidden files (starting with '.')"
+    )]
     allow_hidden: bool,
 
-    #[arg(long, default_value_t = false)]
+    #[arg(
+        long,
+        default_value_t = false,
+        help = "Make regex pattern matching case-insensitive"
+    )]
     ignore_case: bool,
 }
 
