@@ -1,4 +1,4 @@
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use regex::{Regex, RegexBuilder};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -6,6 +6,11 @@ use std::{
     io::{Error, ErrorKind, Result},
     path::PathBuf,
 };
+
+#[derive(Subcommand)]
+enum SubCommand {
+    Uninstall,
+}
 
 #[derive(Parser)]
 #[command(name = "forg")]
@@ -51,6 +56,9 @@ struct Cli {
         help = "Make regex pattern matching case-insensitive"
     )]
     ignore_case: bool,
+
+    #[command(subcommand)]
+    sub_command: Option<SubCommand>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -74,6 +82,37 @@ pub fn main() -> Result<()> {
     let mut forg_dir_path = home.clone();
     forg_dir_path.push(".forg");
     let config_path = forg_dir_path.join("config.json");
+
+    // Subcommand operations
+    if let Some(sub_c) = cli.sub_command {
+        match sub_c {
+            SubCommand::Uninstall => {
+                println!("Uninstalling forg...");
+                // remove config file
+                println!("Removing dir: {}", forg_dir_path.display());
+                fs::remove_dir_all(&forg_dir_path)?;
+                // remove binary
+                let binary_path = env::current_exe().unwrap();
+                println!("Removing binary: {}", binary_path.display());
+                match fs::remove_file(&binary_path) {
+                    Ok(()) => {
+                        println!("Uninstall Done!")
+                    }
+                    Err(e) => {
+                        // binary might be installed globally (/usr/local/bin)
+                        if e.kind() == std::io::ErrorKind::PermissionDenied {
+                            println!("[ERROR] Uninstall Failed: Permission Denied");
+                            println!("Try running with sudo:");
+                            println!("  sudo forg uninstall");
+                        } else {
+                            println!("[ERROR] Uninstall Failed: {}", e);
+                        }
+                    }
+                }
+            }
+        }
+        return Ok(()); // early return if any sub command is triggered
+    }
 
     // Init
     if cli.init {
@@ -245,7 +284,9 @@ pub fn main() -> Result<()> {
                 }
             }
         }
-    } else {
+    }
+    // Unknown operation
+    else {
         println!("Please provide an option. Use --help for info.");
     }
 
