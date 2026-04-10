@@ -1,46 +1,71 @@
 #!/bin/bash
 set -e
 
+# Constants
 REPO="Abhijeet-Gautam5702/forg"
 BINARY_NAME="forg"
 
-# Detect architecture of the system
+# Detect architecture of the system & decide the tar.gz file to download
 ARCH=$(uname -m)
+OS=$(uname -s)
 
-if [[ "$ARCH" == "arm64" ]]; then
-  FILE="forg-macos-arm64.tar.gz"
-elif [[ "$ARCH" == "x86_64" ]]; then
-  FILE="forg-macos-x86_64.tar.gz"
+if [[ "$OS" == "Darwin" ]]; then
+    if [[ "$ARCH" == "arm64" ]]; then
+        FILE="forg-macos-arm64.tar.gz"
+    else
+        FILE="forg-macos-x86_64.tar.gz"
+    fi
+elif [[ "$OS" == "Linux" ]]; then
+    if [[ "$ARCH" == "x86_64" ]]; then
+        FILE="forg-linux-x86_64.tar.gz"
+    else
+        echo "[ERROR] Unsupported Linux Architecture: $ARCH"
+        exit 1
+    fi
 else
-  echo "Unsupported architecture: $ARCH"
-  exit 1
+    echo "[ERROR] Unsupported OS: $OS"
+    exit 1
 fi
 
 # Latest release URL
 URL="https://github.com/$REPO/releases/latest/download/$FILE"
 
+echo "Fetching from $URL"
 echo "Downloading $FILE..."
 
-curl -L "$URL" -o "$FILE"
+curl -L "$URL" -o "$FILE" || {
+ echo "[ERROR] Download failed"
+ exit 1
+}
 
-echo "Extracting..."
-tar -xzf "$FILE"
+echo "Extracting $FILE ...."
+tar -xzf "$FILE" || {
+ echo "[ERROR] Extraction failed"
+ exit 1
+}
 EXTRACTED_FILE="${FILE%.tar.gz}"
 chmod +x "$EXTRACTED_FILE"
 mv "$EXTRACTED_FILE" "$BINARY_NAME"
+echo "Cleanup: Removing $FILE"
 rm "$FILE"
-
-chmod +x "$BINARY_NAME"
 
 # Install location
 INSTALL_DIR="/usr/local/bin"
 
+# Write permission denied to /usr/local/bin -> Install to local bin of the user
 if [[ ! -w "$INSTALL_DIR" ]]; then
+  echo "[WARN] No write access to /usr/local/bin"
   echo "Installing to ~/.local/bin instead..."
+  echo "To install globally, re-run with 'sudo'"
   INSTALL_DIR="$HOME/.local/bin"
   mkdir -p "$INSTALL_DIR"
 fi
 
+# Binary already exists in install location -> Overwrite
+if [[ -f "$INSTALL_DIR/$BINARY_NAME" ]]; then
+  echo "Existing installation found at $INSTALL_DIR/$BINARY_NAME"
+  echo "Overwriting the existing binary..."
+fi
 mv "$BINARY_NAME" "$INSTALL_DIR/$BINARY_NAME"
 
 echo "Installed to $INSTALL_DIR/$BINARY_NAME"
@@ -53,7 +78,7 @@ if command -v forg >/dev/null 2>&1; then
   echo "Installation successful!"
   echo "Run: forg --help"
 else
-  echo "NOT FOUND :::: 'forg' is not in your PATH"
+  echo "[ERROR] 'forg' is not in your PATH"
 
   # Detect shell
   SHELL_NAME=$(basename "$SHELL")
