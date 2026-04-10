@@ -32,7 +32,7 @@ curl -sSL https://raw.githubusercontent.com/Abhijeet-Gautam5702/forg/main/instal
 After running the script, verify that **forg** is correctly installed and accessible:
 ```bash
 which forg
-# output: /Users/<username>/.local/bin/forg
+# output: "/Users/<username>/.local/bin/forg" OR "/usr/local/bin/forg"
 ```
 
 ### Troubleshooting (PATH issues)
@@ -51,6 +51,23 @@ If you get a 'command not found' error, ensure `~/.local/bin` is in your `PATH`.
 ### Supported Platforms
 - **macOS**: arm64 (Apple Silicon) & x86_64 (Intel)
 - **Linux**: x86_64
+
+---
+
+## Uninstallation
+
+There are two ways to uninstall **forg**:
+
+### 1. Via `forg uninstall` command
+> **Note:** This method is available for release versions **>= 0.1.4** only. For other versions, manual uninstall is the only option.
+
+```bash
+forg uninstall
+```
+
+### 2. Manual Uninstallation
+- Run `rm $(which forg)`
+- Run `rm -rf ~/.forg`
 
 ---
 
