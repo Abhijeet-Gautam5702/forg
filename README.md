@@ -54,6 +54,12 @@ If you get a 'command not found' error, ensure `~/.local/bin` is in your `PATH`.
 
 ---
 
+## Installing updates
+
+As of now, in order to update the forg binary, simply install from the bash script again and it will overwrite the existing binary with the latest binary.
+
+---
+
 ## Uninstallation
 
 There are two ways to uninstall **forg**:
