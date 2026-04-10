@@ -59,6 +59,12 @@ struct ConfigItem {
     path: String,
 }
 
+// Template (default config)
+// Note: We cannot directly read from the default_config.json file
+// as rust compiler doesn't bundle the file with the binary
+// so we embed the file contents into DEFAULT_CONFIG at compile time
+const DEFAULT_CONFIG: &str = include_str!("../default_config.json");
+
 pub fn main() -> Result<()> {
     let cli = Cli::parse();
 
@@ -69,30 +75,27 @@ pub fn main() -> Result<()> {
     forg_dir_path.push(".forg");
     let config_path = forg_dir_path.join("config.json");
 
+    // Init
     if cli.init {
         if !forg_dir_path.exists() {
             fs::create_dir_all(&forg_dir_path)?;
         }
 
         if !config_path.exists() {
-            let default_config_path = PathBuf::from("default_config.json");
-            if !default_config_path.exists() {
-                return Err(Error::new(
-                    ErrorKind::NotFound,
-                    "default_config.json not found in current directory",
-                ));
-            }
-            fs::copy(default_config_path, &config_path)?;
+            fs::write(&config_path, DEFAULT_CONFIG)?;
             println!("Initialised: Config created at {}", config_path.display());
             println!(
-                "NOTE: Currently, all the moved files will go to ~/test-forg-dir/ unless you edit {}",
+                "NOTE: Unless you edit {}, all the moved files will go to ~/test-forg-dir/ (see {})",
+                config_path.display(),
                 config_path.display()
             );
-            println!("Edit the config.json according to your needs")
+            println!("So kindly edit the config.json according to your needs")
         } else {
             println!("Already initialised at {}", config_path.display());
         }
-    } else if let Some(target_dir) = cli.exec {
+    }
+    // Execution
+    else if let Some(target_dir) = cli.exec {
         if !config_path.exists() {
             return Err(Error::new(
                 ErrorKind::NotFound,
@@ -151,6 +154,9 @@ pub fn main() -> Result<()> {
         }
 
         println!("\nScanning: {}", target_path.display());
+        println!(
+            "NOTE: In execution mode (without dry-run) any missing directory (in destination directory) will be auto-created\n"
+        );
 
         let entries = fs::read_dir(target_path)?;
         let mut moved_count = 0;
