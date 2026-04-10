@@ -9,8 +9,11 @@ use std::{
 
 #[derive(Parser)]
 #[command(name = "forg")]
-#[command(version = "1.0")]
-#[command(about = "Organises files into designated folders automatically", long_about = None)]
+#[command(version = "0.1.2")]
+#[command(
+    about = "A high-performance, regex-powered file organization tool.",
+    long_about = "forg is a command-line utility that automates directory organization using regex-based rules. It scans target directories and moves files to designated folders based on a priority-ordered configuration. Key features include a safety-first dry-run mode, overwrite protection, case-insensitive matching, and optional processing of hidden files."
+)]
 struct Cli {
     #[arg(
         short,
@@ -81,6 +84,11 @@ pub fn main() -> Result<()> {
             }
             fs::copy(default_config_path, &config_path)?;
             println!("Initialised: Config created at {}", config_path.display());
+            println!(
+                "NOTE: Currently, all the moved files will go to ~/test-forg-dir/ unless you edit {}",
+                config_path.display()
+            );
+            println!("Edit the config.json according to your needs")
         } else {
             println!("Already initialised at {}", config_path.display());
         }

@@ -49,8 +49,8 @@ If you get a 'command not found' error, ensure `~/.local/bin` is in your `PATH`.
 3. Reload config: `source ~/.bashrc`
 
 ### Supported Platforms
-- **macOS**: Apple Silicon (arm64) and Intel (x86_64) via script.
-- **Linux**: Build from source is required.
+- **macOS**: arm64 (Apple Silicon) & x86_64 (Intel)
+- **Linux**: x86_64
 
 ---
 
@@ -76,18 +76,21 @@ forg --init
 ### 2. Organize
 Sort your files (it's recommended to preview first using the dry-run mode):
 ```bash
-# Preview
+# Preview (doesn't move files, but shows the files which will be moved)
 forg --exec Downloads --dry-run
 
-# Execute
+# Execute (actually move files)
 forg --exec Downloads
 ```
+> **Note:** By default, `DIR_PATH` (here, 'Downloads') directory is relative to the home directory.
 
 ---
 
 ## Configuration
 
 You can fully customize how **forg** organizes your files by tweaking the configuration file at `~/.forg/config.json`. Rules are matched from **top to bottom**, meaning the first pattern that matches a file determines its destination.
+
+Just define the path (**relative to home**) for each regex pattern, and you're good to go.
 
 ### Example config.json
 ```json
@@ -110,6 +113,8 @@ You can fully customize how **forg** organizes your files by tweaking the config
 
 > **Note-2:** Remember to escape backslashes in JSON (e.g., use `\\.`).
 
+> **Note-3:** Upon first installation, `config.json` will contain sample directory path (`test-forg-dir`). You must edit this with proper directory path of your choice.
+
 ---
 
 ## Usage
@@ -117,7 +122,7 @@ You can fully customize how **forg** organizes your files by tweaking the config
 | Option | Shorthand | Description |
 | :--- | :--- | :--- |
 | `--init` | `-i` | Initialise the utility and create a default config file. |
-| `--exec <DIR_PATH>`| `-e` | Organise files in the specified directory (relative to home). |
+| `--exec <DIR_PATH>`| `-e` | Organise files in the specified directory DIR_PATH (**relative to home**). |
 | `--dry-run` | `-d` | Recommended: Preview matches without moving files. |
 | `--allow-hidden` | | Process files starting with '.'. Use with caution. |
 | `--ignore-case` | | Enable case-insensitive regex matching. |
