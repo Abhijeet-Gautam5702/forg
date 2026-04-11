@@ -10,6 +10,7 @@ use std::{
 
 #[derive(Subcommand)]
 enum SubCommand {
+    Init,
     Uninstall,
     SelfUpdate,
 }
@@ -19,23 +20,12 @@ enum SubCommand {
 #[command(version = "0.1.5")]
 #[command(
     about = "A high-performance, regex-powered file organization tool.",
-    long_about = "forg is a command-line utility that automates directory organization using regex-based rules. It scans target directories and moves files to designated folders based on a priority-ordered configuration. Key features include a safety-first dry-run mode, overwrite protection, case-insensitive matching, and optional processing of hidden files."
+    long_about = "forg is a command-line utility that automates directory organization using regex-based rules. It scans target directories and moves files to designated folders based on a priority-ordered configuration. Key features include a safety-first dry-run mode, overwrite protection, case-insensitive matching, and optional processing of hidden files.",
+    override_usage = "forg [TARGET_DIR] [OPTIONS] [COMMAND]"
 )]
 struct Cli {
-    #[arg(
-        short,
-        long,
-        help = "Initialise the utility by creating a config file in ~/.forg/config.json (to be run only once in the beginning)"
-    )]
-    init: bool,
-
-    #[arg(
-        short,
-        long,
-        value_name = "DIR_PATH",
-        help = "Organise files in the specified directory (relative to home)"
-    )]
-    exec: Option<String>,
+    // The directory to organise
+    target_dir: Option<String>,
 
     #[arg(
         short('d'),
@@ -58,6 +48,17 @@ struct Cli {
         help = "Make regex pattern matching case-insensitive"
     )]
     ignore_case: bool,
+
+    #[arg(long, short('p'), requires = "dest", help = "Define a regex pattern")]
+    pattern: Option<String>,
+
+    #[arg(
+        long,
+        short('t'),
+        requires = "pattern",
+        help = "Define a destination directory (relative to home)"
+    )]
+    dest: Option<String>,
 
     #[command(subcommand)]
     sub_command: Option<SubCommand>,
@@ -88,9 +89,27 @@ pub fn main() -> Result<()> {
     forg_dir_path.push(".forg");
     let config_path = forg_dir_path.join("config.json");
 
-    // Subcommand operations
+    // SUB COMMANDS
     if let Some(sub_c) = cli.sub_command {
         match sub_c {
+            SubCommand::Init => {
+                if !forg_dir_path.exists() {
+                    fs::create_dir_all(&forg_dir_path)?;
+                }
+
+                if !config_path.exists() {
+                    fs::write(&config_path, DEFAULT_CONFIG)?;
+                    println!("Initialised: Config created at {}", config_path.display());
+                    println!(
+                        "NOTE: Unless you edit {}, all the moved files will go to ~/test-forg-dir/ (see {})",
+                        config_path.display(),
+                        config_path.display()
+                    );
+                    println!("So kindly edit the config.json according to your needs")
+                } else {
+                    println!("Already initialised at {}", config_path.display());
+                }
+            }
             SubCommand::Uninstall => {
                 println!("Uninstalling forg...");
                 // remove config file
@@ -143,93 +162,81 @@ pub fn main() -> Result<()> {
         return Ok(()); // early return if any sub command is triggered
     }
 
-    // Init
-    if cli.init {
-        if !forg_dir_path.exists() {
-            fs::create_dir_all(&forg_dir_path)?;
-        }
-
-        if !config_path.exists() {
-            fs::write(&config_path, DEFAULT_CONFIG)?;
-            println!("Initialised: Config created at {}", config_path.display());
-            println!(
-                "NOTE: Unless you edit {}, all the moved files will go to ~/test-forg-dir/ (see {})",
-                config_path.display(),
-                config_path.display()
-            );
-            println!("So kindly edit the config.json according to your needs")
-        } else {
-            println!("Already initialised at {}", config_path.display());
-        }
-    }
-    // Execution
-    else if let Some(target_dir) = cli.exec {
-        if !config_path.exists() {
+    // EXECUTION
+    if let Some(target_dir) = cli.target_dir {
+        // Check if the directory (to organise) exists
+        let target_folder_path = home.join(target_dir);
+        if !target_folder_path.exists() {
             return Err(Error::new(
                 ErrorKind::NotFound,
-                "Utility not initialised. Run 'forg --init' first.",
+                format!(
+                    "Target directory '{}' not found.",
+                    target_folder_path.display()
+                ),
             ));
         }
 
-        // Print Mode Disclaimers
-        if cli.dry_run || cli.allow_hidden || cli.ignore_case {
-            println!("--------------------------------------------");
-            if cli.dry_run {
-                println!("DRY RUN ENABLED: No files will actually be moved.");
-            }
-            if cli.allow_hidden {
-                println!(
-                    "ALLOW HIDDEN: System/hidden files (starting with '.') will be processed."
-                );
-            }
-            if cli.ignore_case {
-                println!("IGNORE CASE: Regex matching will be case-insensitive.");
-            }
-            println!("--------------------------------------------");
-        }
-
-        // Read and parse config
-        let config_data_str = fs::read_to_string(&config_path)?;
-        let config_json: Vec<ConfigItem> = serde_json::from_str(&config_data_str).map_err(|e| {
-            Error::new(ErrorKind::InvalidData, format!("Config parse error: {}", e))
-        })?;
-
-        // Pre-compile rules with regex objects in a Vector to preserve order (priority preservation)
         let mut rules: Vec<(Regex, PathBuf)> = Vec::new();
-        for config_item in &config_json {
-            let folder_complete_path = home.join(&config_item.path);
-            let pattern_regex = RegexBuilder::new(&config_item.pattern)
+
+        // ON-THE-FLY MODE
+        // works only on a single pattern and destination path provided by the user
+        if let (Some(p), Some(d)) = (cli.pattern, cli.dest) {
+            println!(
+                "ON-THE-FLY MODE: \nBypassing config.json\nUsing user-provided pattern and destination path..."
+            );
+            let dest_folder_path = home.join(&d);
+            let pattern_regex = RegexBuilder::new(&p)
                 .case_insensitive(cli.ignore_case)
                 .build()
                 .map_err(|e| {
                     Error::new(
                         ErrorKind::InvalidInput,
-                        format!("Invalid regex '{}': {}", config_item.pattern, e),
+                        format!("Invalid regex '{}': {}", p, e),
                     )
                 })?;
-            rules.push((pattern_regex, folder_complete_path));
+            rules.push((pattern_regex, dest_folder_path));
+        }
+        // COMPLETE EXECUTION MODE
+        // works on all the rules (pattern & destination path) provided in config.json
+        else {
+            if !config_path.exists() {
+                return Err(Error::new(
+                    ErrorKind::NotFound,
+                    "Utility not initialised. Run 'forg init' first.",
+                ));
+            }
+
+            // Read and parse config
+            let config_data_str = fs::read_to_string(&config_path)?;
+            let config_json: Vec<ConfigItem> =
+                serde_json::from_str(&config_data_str).map_err(|e| {
+                    Error::new(ErrorKind::InvalidData, format!("Config parse error: {}", e))
+                })?;
+
+            for config_item in &config_json {
+                let dest_folder_path = home.join(&config_item.path);
+                let pattern_regex = RegexBuilder::new(&config_item.pattern)
+                    .case_insensitive(cli.ignore_case)
+                    .build()
+                    .map_err(|e| {
+                        Error::new(
+                            ErrorKind::InvalidInput,
+                            format!("Invalid regex '{}': {}", config_item.pattern, e),
+                        )
+                    })?;
+                rules.push((pattern_regex, dest_folder_path));
+            }
         }
 
-        let target_path = home.join(target_dir);
-        if !target_path.exists() {
-            return Err(Error::new(
-                ErrorKind::NotFound,
-                format!(
-                    "Target directory (--exec <DIR_PATH>) not found: {}",
-                    target_path.display()
-                ),
-            ));
-        }
-
-        println!("\nScanning: {}", target_path.display());
+        // FILE MOVING LOGIC
+        println!("\nScanning: {}", target_folder_path.display());
         println!(
-            "NOTE: In execution mode (without dry-run) any missing directory (in destination directory) will be auto-created\n"
+            "\nNOTE: During actual file-moving (dry-run disabled) any missing directory (in destination directory) will be auto-created.\n"
         );
 
-        let entries = fs::read_dir(target_path)?;
+        let entries = fs::read_dir(target_folder_path)?;
         let mut moved_count = 0;
         let mut failed_files: Vec<(String, String)> = Vec::new();
-
         for entry in entries {
             let entry = entry?;
             if entry.file_type()?.is_file() {
@@ -273,6 +280,7 @@ pub fn main() -> Result<()> {
                                 }
 
                                 // File overwrite protection:
+                                // skip file moving if a file with same name already exists in destination
                                 if to_path.exists() {
                                     failed_files.push((
                                         filename_str.to_string(),
@@ -302,6 +310,7 @@ pub fn main() -> Result<()> {
                 }
             }
         }
+
         if cli.dry_run {
             println!("\nTotal Files To Be Moved: {}", moved_count);
         } else {
@@ -314,7 +323,7 @@ pub fn main() -> Result<()> {
             }
         }
     }
-    // Unknown operation
+    // UNKNOWN OPERATION
     else {
         println!("Please provide an option. Use --help for info.");
     }

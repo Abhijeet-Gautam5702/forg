@@ -93,19 +93,19 @@ cargo build --release
 ### 1. Initialization
 Set up your global configuration file in `~/.forg/config.json`:
 ```bash
-forg --init
+forg init
 ```
 
 ### 2. Organize
 Sort your files (it's recommended to preview first using the dry-run mode):
 ```bash
 # Preview (doesn't move files, but shows the files which will be moved)
-forg --exec Downloads --dry-run
+forg Downloads --dry-run
 
 # Execute (actually move files)
-forg --exec Downloads
+forg Downloads
 ```
-> **Note:** By default, `DIR_PATH` (here, 'Downloads') directory is relative to the home directory.
+> **Note:** By default, `target_dir` (here, 'Downloads') directory is relative to the home directory.
 
 ---
 
@@ -142,13 +142,20 @@ Just define the path (**relative to home**) for each regex pattern, and you're g
 
 ## Usage
 
+| Command | Description |
+| :--- | :--- |
+| `init` | Initialise the utility and create a default config file. |
+| `uninstall` | Uninstall the utility and remove config files. |
+| `self-update` | Update the utility to the latest version. |
+
 | Option | Shorthand | Description |
 | :--- | :--- | :--- |
-| `--init` | `-i` | Initialise the utility and create a default config file. |
-| `--exec <DIR_PATH>`| `-e` | Organise files in the specified directory DIR_PATH (**relative to home**). |
+| `[TARGET_DIR]` | | Positional: Organise files in the specified directory (**relative to home**). |
 | `--dry-run` | `-d` | Recommended: Preview matches without moving files. |
 | `--allow-hidden` | | Process files starting with '.'. Use with caution. |
 | `--ignore-case` | | Enable case-insensitive regex matching. |
+| `--pattern` | `-p` | Define a one-off regex pattern (bypasses config). |
+| `--dest` | `-t` | Define a one-off destination directory (used with -p). |
 
 ---
 
