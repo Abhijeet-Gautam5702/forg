@@ -2,6 +2,7 @@ use clap::{Parser, Subcommand};
 use regex::{Regex, RegexBuilder};
 use serde::{Deserialize, Serialize};
 use std::{
+    collections::BTreeMap,
     env, fs,
     io::{Error, ErrorKind, Result},
     path::PathBuf,
@@ -176,16 +177,37 @@ pub fn main() -> Result<()> {
             ));
         }
 
+        // Print Execution Modes & Options (UX)
+        println!("---------------------------------");
+        let mode = if cli.pattern.is_some() && cli.dest.is_some() {
+            "ON-THE-FLY (CONFIG BYPASS)"
+        } else {
+            "COMPLETE (CONFIG BASED)"
+        };
+        println!("EXECUTION MODE: {}", mode);
+
+        let mut enabled_options = Vec::new();
+        if cli.dry_run {
+            enabled_options.push("DRY-RUN");
+        }
+        if cli.ignore_case {
+            enabled_options.push("IGNORE-CASE");
+        }
+        if cli.allow_hidden {
+            enabled_options.push("ALLOW-HIDDEN");
+        }
+
+        if !enabled_options.is_empty() {
+            println!("OPTIONS ENABLED: {}", enabled_options.join(", "));
+        }
+        println!("---------------------------------");
+
         let mut rules: Vec<(Regex, PathBuf)> = Vec::new();
 
         // ON-THE-FLY MODE
-        // works only on a single pattern and destination path provided by the user
-        if let (Some(p), Some(d)) = (cli.pattern, cli.dest) {
-            println!(
-                "ON-THE-FLY MODE: \nBypassing config.json\nUsing user-provided pattern and destination path..."
-            );
-            let dest_folder_path = home.join(&d);
-            let pattern_regex = RegexBuilder::new(&p)
+        if let (Some(p), Some(d)) = (&cli.pattern, &cli.dest) {
+            let dest_folder_path = home.join(d);
+            let pattern_regex = RegexBuilder::new(p)
                 .case_insensitive(cli.ignore_case)
                 .build()
                 .map_err(|e| {
@@ -230,13 +252,10 @@ pub fn main() -> Result<()> {
 
         // FILE MOVING LOGIC
         println!("\nScanning: {}", target_folder_path.display());
-        println!(
-            "\nNOTE: During actual file-moving (dry-run disabled) any missing directory (in destination directory) will be auto-created.\n"
-        );
 
-        let entries = fs::read_dir(target_folder_path)?;
-        let mut moved_count = 0;
-        let mut failed_files: Vec<(String, String)> = Vec::new();
+        let entries = fs::read_dir(&target_folder_path)?;
+        let mut grouped_moves: BTreeMap<PathBuf, Vec<String>> = BTreeMap::new();
+
         for entry in entries {
             let entry = entry?;
             if entry.file_type()?.is_file() {
@@ -252,74 +271,84 @@ pub fn main() -> Result<()> {
                             let from_path = entry.path();
                             let to_path = dest_dir.join(filename_str);
 
-                            // skip same directory move
-                            if to_path == from_path {
-                                break;
+                            if to_path != from_path {
+                                grouped_moves
+                                    .entry(dest_dir.clone())
+                                    .or_default()
+                                    .push(filename_str.to_string());
                             }
-
-                            if cli.dry_run {
-                                println!(
-                                    "{}) Would move: {} -> {}",
-                                    moved_count + 1,
-                                    filename_str,
-                                    dest_dir.display()
-                                );
-                                moved_count += 1;
-                            }
-                            // move to desstination folder
-                            else {
-                                // Optimization: Only create directory when a match is actually found
-                                if !dest_dir.exists() {
-                                    if let Err(e) = fs::create_dir_all(dest_dir) {
-                                        failed_files.push((
-                                            filename_str.to_string(),
-                                            format!("Failed to create dir: {}", e),
-                                        ));
-                                        break;
-                                    }
-                                }
-
-                                // File overwrite protection:
-                                // skip file moving if a file with same name already exists in destination
-                                if to_path.exists() {
-                                    failed_files.push((
-                                        filename_str.to_string(),
-                                        String::from("filename already exists in destination"),
-                                    ));
-                                    continue;
-                                }
-                                match fs::rename(&from_path, &to_path) {
-                                    Ok(_) => {
-                                        println!(
-                                            "{}) {} -> {}",
-                                            moved_count + 1,
-                                            filename_str,
-                                            dest_dir.display()
-                                        );
-                                        moved_count += 1;
-                                    }
-                                    Err(e) => {
-                                        failed_files.push((filename_str.to_string(), e.to_string()))
-                                    }
-                                }
-                            }
-
-                            break; // Stop checking other patterns once the first match is found (Priority)
+                            break;
                         }
                     }
                 }
             }
         }
 
-        if cli.dry_run {
-            println!("\nTotal Files To Be Moved: {}", moved_count);
-        } else {
-            println!("\nTotal Files Moved: {}", moved_count);
-            if !failed_files.is_empty() {
-                println!("\nErrors occurred for the following files:");
-                for (file, error) in failed_files {
-                    println!(" - {}: {}", file, error);
+        let mut total_moved = 0;
+        let mut failed_files: Vec<(String, String)> = Vec::new();
+
+        for (dest_dir, filenames) in grouped_moves {
+            let action_text = if cli.dry_run {
+                "will be moved"
+            } else {
+                "moved"
+            };
+            println!(
+                "\n{} file(s) {} to {}",
+                filenames.len(),
+                action_text,
+                dest_dir.display()
+            );
+
+            for (i, filename) in filenames.iter().enumerate() {
+                if cli.dry_run {
+                    println!(" ({}) {}", i + 1, filename);
+                    total_moved += 1;
                 }
+                // Actual file moving logic
+                else {
+                    if !dest_dir.exists() {
+                        if let Err(e) = fs::create_dir_all(&dest_dir) {
+                            failed_files
+                                .push((filename.clone(), format!("Failed to create dir: {}", e)));
+                            continue;
+                        }
+                    }
+
+                    let from_path = target_folder_path.join(filename);
+                    let to_path = dest_dir.join(filename);
+
+                    // Overwrite protection:
+                    // skip moving file if the filename already exists in destination
+                    if to_path.exists() {
+                        failed_files.push((
+                            filename.clone(),
+                            "filename already exists in destination".to_string(),
+                        ));
+                        continue;
+                    }
+
+                    match fs::rename(&from_path, &to_path) {
+                        Ok(_) => {
+                            println!(" ({}) {}", i + 1, filename);
+                            total_moved += 1;
+                        }
+                        Err(e) => failed_files.push((filename.clone(), e.to_string())),
+                    }
+                }
+            }
+        }
+
+        println!(
+            "\nTotal files {}: {}",
+            if cli.dry_run { "to be moved" } else { "moved" },
+            total_moved
+        );
+
+        if !failed_files.is_empty() {
+            println!("\nErrors occurred for the following files:");
+            for (file, error) in failed_files {
+                println!(" - {}: {}", file, error);
             }
         }
     }
