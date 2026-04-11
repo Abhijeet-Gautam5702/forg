@@ -56,7 +56,20 @@ If you get a 'command not found' error, ensure `~/.local/bin` is in your `PATH`.
 
 ## Installing updates
 
-As of now, in order to update the forg binary, simply install from the bash script again and it will overwrite the existing binary with the latest binary.
+There are two ways to update **forg**:
+
+### 1. Via `forg self-update` command
+> **Note:** This method is available for release versions **>= 0.1.5** only.
+
+```bash
+forg self-update
+```
+
+### 2. Manual Update
+Simply run the installation script again, and it will overwrite the existing binary with the latest version:
+```bash
+curl -sSL https://raw.githubusercontent.com/Abhijeet-Gautam5702/forg/main/install.sh | bash
+```
 
 ---
 
