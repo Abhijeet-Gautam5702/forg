@@ -178,29 +178,52 @@ pub fn main() -> Result<()> {
         }
 
         // Print Execution Modes & Options (UX)
-        println!("---------------------------------");
+        println!("------------------------------------------------------------------");
         let mode = if cli.pattern.is_some() && cli.dest.is_some() {
-            "ON-THE-FLY (CONFIG BYPASS)"
+            "On-The-Fly"
         } else {
-            "COMPLETE (CONFIG BASED)"
+            "Complete"
         };
-        println!("EXECUTION MODE: {}", mode);
+        println!("EXECUTION MODE:");
+        if cli.pattern.is_some() && cli.dest.is_some() {
+            println!(
+                " - {}: This will bypass the config.json and use the pattern & destination provided by the user.",
+                mode
+            );
+        } else {
+            println!(
+                " - {}: This will use the configuration defined in {}",
+                mode,
+                config_path.display()
+            );
+        }
 
         let mut enabled_options = Vec::new();
         if cli.dry_run {
-            enabled_options.push("DRY-RUN");
+            enabled_options.push("Dry-run");
         }
         if cli.ignore_case {
-            enabled_options.push("IGNORE-CASE");
+            enabled_options.push("Ignore-case");
         }
         if cli.allow_hidden {
-            enabled_options.push("ALLOW-HIDDEN");
+            enabled_options.push("Allow-hidden");
         }
 
         if !enabled_options.is_empty() {
-            println!("OPTIONS ENABLED: {}", enabled_options.join(", "));
+            println!("\nOPTIONS ENABLED:");
+            if cli.dry_run {
+                println!(" - Dry-run: Preview mode. No files will actually be moved.");
+            }
+            if cli.ignore_case {
+                println!(" - Ignore-case: Regex matching will be case-insensitive.");
+            }
+            if cli.allow_hidden {
+                println!(
+                    " - Allow-hidden: Hidden files (starting with '.') will also be processed."
+                );
+            }
         }
-        println!("---------------------------------");
+        println!("------------------------------------------------------------------");
 
         let mut rules: Vec<(Regex, PathBuf)> = Vec::new();
 
@@ -250,12 +273,11 @@ pub fn main() -> Result<()> {
             }
         }
 
-        // FILE MOVING LOGIC
+        // FILE GROUPING LOGIC
+        // group the files into directories they're to be organised into
         println!("\nScanning: {}", target_folder_path.display());
-
         let entries = fs::read_dir(&target_folder_path)?;
         let mut grouped_moves: BTreeMap<PathBuf, Vec<String>> = BTreeMap::new();
-
         for entry in entries {
             let entry = entry?;
             if entry.file_type()?.is_file() {
@@ -284,9 +306,9 @@ pub fn main() -> Result<()> {
             }
         }
 
+        // FILE MOVING LOGIC
         let mut total_moved = 0;
         let mut failed_files: Vec<(String, String)> = Vec::new();
-
         for (dest_dir, filenames) in grouped_moves {
             let action_text = if cli.dry_run {
                 "will be moved"
@@ -338,13 +360,11 @@ pub fn main() -> Result<()> {
                 }
             }
         }
-
         println!(
             "\nTotal files {}: {}",
             if cli.dry_run { "to be moved" } else { "moved" },
             total_moved
         );
-
         if !failed_files.is_empty() {
             println!("\nErrors occurred for the following files:");
             for (file, error) in failed_files {
