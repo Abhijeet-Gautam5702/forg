@@ -5,16 +5,18 @@ use std::{
     env, fs,
     io::{Error, ErrorKind, Result},
     path::PathBuf,
+    process::Command,
 };
 
 #[derive(Subcommand)]
 enum SubCommand {
     Uninstall,
+    SelfUpdate,
 }
 
 #[derive(Parser)]
 #[command(name = "forg")]
-#[command(version = "0.1.2")]
+#[command(version = "0.1.5")]
 #[command(
     about = "A high-performance, regex-powered file organization tool.",
     long_about = "forg is a command-line utility that automates directory organization using regex-based rules. It scans target directories and moves files to designated folders based on a priority-ordered configuration. Key features include a safety-first dry-run mode, overwrite protection, case-insensitive matching, and optional processing of hidden files."
@@ -73,6 +75,9 @@ struct ConfigItem {
 // so we embed the file contents into DEFAULT_CONFIG at compile time
 const DEFAULT_CONFIG: &str = include_str!("../default_config.json");
 
+const INSTALL_COMMAND: &str =
+    "curl -sSL https://raw.githubusercontent.com/Abhijeet-Gautam5702/forg/main/install.sh | bash";
+
 pub fn main() -> Result<()> {
     let cli = Cli::parse();
 
@@ -108,6 +113,28 @@ pub fn main() -> Result<()> {
                             println!("  sudo forg uninstall");
                         } else {
                             println!("[ERROR] Uninstall Failed: {}", e);
+                        }
+                    }
+                }
+            }
+            SubCommand::SelfUpdate => {
+                println!("Updating forg...");
+                // spawn a new shell process and install via script
+                match Command::new("sh").arg("-c").arg(&INSTALL_COMMAND).status() {
+                    Ok(status) => {
+                        if status.success() {
+                            println!("forg updated successfully");
+                        } else {
+                            println!("[ERROR] Update script failed with status: {}", status);
+                        }
+                    }
+                    Err(e) => {
+                        if e.kind() == ErrorKind::PermissionDenied {
+                            println!("[ERROR] Failed to update forg: PERMISSION DENIED");
+                            println!("Try running with sudo:");
+                            println!("  sudo forg self-update");
+                        } else {
+                            println!("[ERROR] Failed to update forg: {}", e);
                         }
                     }
                 }
