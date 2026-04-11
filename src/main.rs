@@ -18,7 +18,7 @@ enum SubCommand {
 
 #[derive(Parser)]
 #[command(name = "forg")]
-#[command(version = "0.1.6")]
+#[command(version = "2.0.0")]
 #[command(
     about = "A high-performance, regex-powered file organization tool.",
     long_about = "forg is a command-line utility that automates directory organization using regex-based rules. It scans target directories and moves files to designated folders based on a priority-ordered configuration. Key features include a safety-first dry-run mode, overwrite protection, case-insensitive matching, and optional processing of hidden files.",
