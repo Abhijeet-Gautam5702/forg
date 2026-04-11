@@ -102,11 +102,10 @@ pub fn main() -> Result<()> {
                     fs::write(&config_path, DEFAULT_CONFIG)?;
                     println!("Initialised: Config created at {}", config_path.display());
                     println!(
-                        "NOTE: Unless you edit {}, all the moved files will go to ~/test-forg-dir/ (see {})",
-                        config_path.display(),
+                        "NOTE: Files will be moved to standard folders like ~/Pictures, ~/Documents, etc. (see {})",
                         config_path.display()
                     );
-                    println!("So kindly edit the config.json according to your needs")
+                    println!("You can edit the config.json to customize your rules")
                 } else {
                     println!("Already initialised at {}", config_path.display());
                 }

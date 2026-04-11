@@ -159,7 +159,7 @@ Just define the path (**relative to home**) for each regex pattern, and you're g
 
 > **Note-2:** Remember to escape backslashes in JSON (e.g., use `\\.`) & Do not put `/` in the start of the path (i.e., `/Desktop/Screenshots` 🚫 whereas `Desktop/Screenshots` ✅).
 
-> **Note-3:** Upon first installation, `config.json` will contain sample directory path (`test-forg-dir`). You must edit this with proper directory path of your choice.
+> **Note-3:** Upon first installation, `config.json` will contain default rules to move common files to standard folders like `~/Pictures`, `~/Documents`, etc. You can edit this to customize according to your needs.
 
 ---
 
