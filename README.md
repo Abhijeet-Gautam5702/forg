@@ -1,7 +1,7 @@
 # 🦀 forg
 
-[![Built with Rust](https://img.shields.io/badge/Built_with-Rust-orange?logo=rust)](https://www.rust-lang.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Version](https://img.shields.io/badge/Version-2.0.0-blue.svg)](./CHANGELOG.md)
+[![Changelog](https://img.shields.io/badge/Changelog-latest-green.svg)](./CHANGELOG.md)
 
 **forg** is a high-performance, regex-powered file organization CLI tool built in Rust. It automates the tedious task of sorting files into designated directories based on custom pattern-matching rules, ensuring your workspace remains clean and structured.
 
@@ -185,6 +185,11 @@ Just define the path (**relative to home**) for each regex pattern, and you're g
 > [!CAUTION]
 > ### SAFETY DISCLAIMER
 > Moving system files can be destructive. **forg** defaults to ignoring hidden files and provides a **dry-run** mode. Always verify your regex patterns before running execution in production environments.
+
+---
+
+## Changelog
+Detailed changes for each release are documented in [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
