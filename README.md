@@ -113,7 +113,9 @@ Bypass your `config.json` and organize files using a one-off rule:
 # Move all PDFs from Downloads to ~/Documents/PDFs
 forg Downloads -p '.*\.pdf$' -t Documents/PDFs
 ```
-> **Note:** Using `-p` (pattern) and `-t` (target/destination) together will trigger on-the-fly mode, causing **forg** to ignore the rules in your configuration file for that specific execution.
+> **Note-1:** Using `-p` (pattern) and `-t` (target/destination) together will trigger on-the-fly mode, causing **forg** to ignore the rules in your configuration file for that specific execution.
+
+> **Note-2:** Remember to put the regex pattern inside single quotes (' ') for it to work correctly.
 
 ---
 
@@ -142,7 +144,7 @@ Just define the path (**relative to home**) for each regex pattern, and you're g
 ```
 > **Note-1:** As of now, the CLI doesn't support shell-type glob-patterns (like `*.pdf`, etc.). You must write proper regex patterns only (as given in the default `config.json`).
 
-> **Note-2:** Remember to escape backslashes in JSON (e.g., use `\\.`).
+> **Note-2:** Remember to escape backslashes in JSON (e.g., use `\\.`) & Do not put `/` in the start of the path (i.e., `/Desktop/Screenshots` 🚫 whereas `Desktop/Screenshots` ✅).
 
 > **Note-3:** Upon first installation, `config.json` will contain sample directory path (`test-forg-dir`). You must edit this with proper directory path of your choice.
 
