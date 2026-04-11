@@ -107,6 +107,14 @@ forg Downloads
 ```
 > **Note:** By default, `target_dir` (here, 'Downloads') directory is relative to the home directory.
 
+### 3. On-the-fly Mode (Quick Organize)
+Bypass your `config.json` and organize files using a one-off rule:
+```bash
+# Move all PDFs from Downloads to ~/Documents/PDFs
+forg Downloads -p '.*\.pdf$' -t Documents/PDFs
+```
+> **Note:** Using `-p` (pattern) and `-t` (target/destination) together will trigger on-the-fly mode, causing **forg** to ignore the rules in your configuration file for that specific execution.
+
 ---
 
 ## Configuration
