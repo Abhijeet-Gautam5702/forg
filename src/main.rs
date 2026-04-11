@@ -89,8 +89,10 @@ pub fn main() -> Result<()> {
             SubCommand::Uninstall => {
                 println!("Uninstalling forg...");
                 // remove config file
-                println!("Removing dir: {}", forg_dir_path.display());
-                fs::remove_dir_all(&forg_dir_path)?;
+                if forg_dir_path.exists() {
+                    println!("Removing dir: {}", forg_dir_path.display());
+                    fs::remove_dir_all(&forg_dir_path)?;
+                }
                 // remove binary
                 let binary_path = env::current_exe().unwrap();
                 println!("Removing binary: {}", binary_path.display());
@@ -101,7 +103,7 @@ pub fn main() -> Result<()> {
                     Err(e) => {
                         // binary might be installed globally (/usr/local/bin)
                         if e.kind() == std::io::ErrorKind::PermissionDenied {
-                            println!("[ERROR] Uninstall Failed: Permission Denied");
+                            println!("[ERROR] Uninstall Failed: PERMISSION DENIED");
                             println!("Try running with sudo:");
                             println!("  sudo forg uninstall");
                         } else {
