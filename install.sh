@@ -27,7 +27,10 @@ else
     exit 1
 fi
 
-# Latest release URL
+# Get the latest binary present on github releases
+LATEST_VERSION=$(curl -s "https://api.github.com/repos/Abhijeet-Gautam5702/forg/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' | sed 's/^v//')
+echo "Installing forg v$LATEST_VERSION"
+# Release URL (LATEST VERSION)
 URL="https://github.com/$REPO/releases/latest/download/$FILE"
 
 echo "Fetching from $URL"
@@ -75,7 +78,7 @@ echo ""
 echo "Verifying installation..."
 
 if command -v forg >/dev/null 2>&1; then
-  echo "Installation successful!"
+  echo "forg v$LATEST_VERSION Installation successful!"
   echo "Run: forg --help"
 else
   echo "[ERROR] 'forg' is not in your PATH"

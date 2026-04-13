@@ -6,7 +6,8 @@ use std::{
     env, fs,
     io::{Error, ErrorKind, Result},
     path::PathBuf,
-    process::Command,
+    process::{self, Command},
+    time::Instant,
 };
 
 #[derive(Subcommand)]
@@ -80,7 +81,22 @@ const DEFAULT_CONFIG: &str = include_str!("../default_config.json");
 const INSTALL_COMMAND: &str =
     "curl -sSL https://raw.githubusercontent.com/Abhijeet-Gautam5702/forg/main/install.sh | bash";
 
-pub fn main() -> Result<()> {
+// MACROS
+macro_rules! report_err {
+    ($($arg:tt)*) => {{
+        eprintln!("\x1b[31;1mERROR:\x1b[0m {}", format_args!($($arg)*));
+    }};
+}
+
+macro_rules! report_note {
+    ($($arg:tt)*) => {{
+        eprintln!("\x1b[33;1mNOTE:\x1b[0m {}", format_args!($($arg)*));
+    }};
+}
+
+pub fn run() -> Result<()> {
+    let version = env!("CARGO_PKG_VERSION");
+
     let cli = Cli::parse();
 
     // Get home directory and config path
@@ -94,15 +110,16 @@ pub fn main() -> Result<()> {
     if let Some(sub_c) = cli.sub_command {
         match sub_c {
             SubCommand::Init => {
+                println!("Initialising forg v{}", version);
                 if !forg_dir_path.exists() {
                     fs::create_dir_all(&forg_dir_path)?;
                 }
 
                 if !config_path.exists() {
                     fs::write(&config_path, DEFAULT_CONFIG)?;
-                    println!("Initialised: Config created at {}", config_path.display());
-                    println!(
-                        "NOTE: Files will be moved to standard folders like ~/Pictures, ~/Documents, etc. (see {})",
+                    println!("Config created at {}\n", config_path.display());
+                    report_note!(
+                        "Files will be moved to standard folders like ~/Pictures, ~/Documents, etc. (as defined in {})",
                         config_path.display()
                     );
                     println!("You can edit the config.json to customize your rules")
@@ -111,7 +128,7 @@ pub fn main() -> Result<()> {
                 }
             }
             SubCommand::Uninstall => {
-                println!("Uninstalling forg...");
+                println!("Uninstalling forg v{}...", version);
                 // remove config file
                 if forg_dir_path.exists() {
                     println!("Removing dir: {}", forg_dir_path.display());
@@ -122,16 +139,16 @@ pub fn main() -> Result<()> {
                 println!("Removing binary: {}", binary_path.display());
                 match fs::remove_file(&binary_path) {
                     Ok(()) => {
-                        println!("Uninstall Done!")
+                        println!("forg v{} uninstalled successfully", version);
                     }
                     Err(e) => {
                         // binary might be installed globally (/usr/local/bin)
                         if e.kind() == std::io::ErrorKind::PermissionDenied {
-                            println!("[ERROR] Uninstall Failed: PERMISSION DENIED");
+                            report_err!("Uninstall Failed: PERMISSION DENIED");
                             println!("Try running with sudo:");
                             println!("  sudo forg uninstall");
                         } else {
-                            println!("[ERROR] Uninstall Failed: {}", e);
+                            report_err!("Uninstall Failed: {}", e);
                         }
                     }
                 }
@@ -142,18 +159,18 @@ pub fn main() -> Result<()> {
                 match Command::new("sh").arg("-c").arg(&INSTALL_COMMAND).status() {
                     Ok(status) => {
                         if status.success() {
-                            println!("forg updated successfully");
+                            println!("forg updated to version");
                         } else {
-                            println!("[ERROR] Update script failed with status: {}", status);
+                            report_err!("Update script failed with status: {}", status);
                         }
                     }
                     Err(e) => {
                         if e.kind() == ErrorKind::PermissionDenied {
-                            println!("[ERROR] Failed to update forg: PERMISSION DENIED");
+                            report_err!("Failed to update forg: PERMISSION DENIED");
                             println!("Try running with sudo:");
                             println!("  sudo forg self-update");
                         } else {
-                            println!("[ERROR] Failed to update forg: {}", e);
+                            report_err!("Failed to update forg: {}", e);
                         }
                     }
                 }
@@ -164,6 +181,8 @@ pub fn main() -> Result<()> {
 
     // EXECUTION
     if let Some(target_dir) = cli.target_dir {
+        let now = Instant::now();
+
         // Check if the directory (to organise) exists
         let target_folder_path = home.join(target_dir);
         if !target_folder_path.exists() {
@@ -246,7 +265,7 @@ pub fn main() -> Result<()> {
             if !config_path.exists() {
                 return Err(Error::new(
                     ErrorKind::NotFound,
-                    "Utility not initialised. Run 'forg init' first.",
+                    "No config.json found. Run 'forg init' first.",
                 ));
             }
 
@@ -364,6 +383,13 @@ pub fn main() -> Result<()> {
             if cli.dry_run { "to be moved" } else { "moved" },
             total_moved
         );
+
+        // show elapsed time only if at lease one file was actually moved
+        if !cli.dry_run && total_moved > 0 {
+            let elapsed_ms = now.elapsed();
+            println!("Total time taken: {}ms", elapsed_ms.as_millis());
+        }
+
         if !failed_files.is_empty() {
             println!("\nErrors occurred for the following files:");
             for (file, error) in failed_files {
@@ -377,4 +403,12 @@ pub fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+pub fn main() {
+    if let Err(e) = run() {
+        println!("");
+        report_err!("{}", e);
+        process::exit(1);
+    }
 }
