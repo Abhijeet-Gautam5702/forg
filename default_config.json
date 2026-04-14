@@ -32,6 +32,10 @@
     "path": "Documents/Markdowns"
   },
   {
+    "pattern": ".*\\.docx?$",
+    "path": "Documents/DOCXs"
+  },
+  {
     "pattern": ".*\\.(pdf|txt|rtf|docx?|xlsx?|pptx?|odt|md|csv|epub|mobi)$",
     "path": "Documents"
   },

@@ -10,6 +10,9 @@ use std::{
     time::Instant,
 };
 
+mod execution_report;
+use execution_report::{ExecutionReport, generate_execution_report};
+
 #[derive(Subcommand)]
 enum SubCommand {
     Init,
@@ -291,6 +294,11 @@ pub fn run() -> Result<()> {
             }
         }
 
+        // Initialize report metrics
+        let mut total_files_scanned = 0;
+        let mut total_matched = 0;
+        let mut total_size_moved = 0;
+
         // FILE GROUPING LOGIC
         // group the files into directories they're to be organised into
         println!("\nScanning: {}", target_folder_path.display());
@@ -299,6 +307,7 @@ pub fn run() -> Result<()> {
         for entry in entries {
             let entry = entry?;
             if entry.file_type()?.is_file() {
+                total_files_scanned += 1;
                 if let Some(filename_str) = entry.file_name().to_str() {
                     // Skip hidden files if not allowed
                     if !cli.allow_hidden && filename_str.starts_with('.') {
@@ -316,6 +325,7 @@ pub fn run() -> Result<()> {
                                     .entry(dest_dir.clone())
                                     .or_default()
                                     .push(filename_str.to_string());
+                                total_matched += 1;
                             }
                             break;
                         }
@@ -325,25 +335,40 @@ pub fn run() -> Result<()> {
         }
 
         // FILE MOVING LOGIC
+        let move_start = Instant::now();
         let mut total_moved = 0;
+        let mut total_skipped_conflict = 0;
         let mut failed_files: Vec<(String, String)> = Vec::new();
-        for (dest_dir, filenames) in grouped_moves {
-            let action_text = if cli.dry_run {
-                "will be moved"
-            } else {
-                "moved"
-            };
-            println!(
-                "\n{} file(s) {} to {}",
-                filenames.len(),
-                action_text,
-                dest_dir.display()
-            );
 
-            for (i, filename) in filenames.iter().enumerate() {
+        for (dest_dir, filenames) in grouped_moves {
+            let mut move_cnt_for_this_dest = 0;
+
+            println!("\nDestination Directory: {}", dest_dir.display());
+            println!("Files to be moved:");
+
+            for (_, filename) in filenames.iter().enumerate() {
+                let from_path = target_folder_path.join(filename);
+                let to_path = dest_dir.join(filename);
+
                 if cli.dry_run {
-                    println!(" ({}) {}", i + 1, filename);
+                    // DRY-RUN MODE:
+                    if to_path.exists() {
+                        failed_files.push((
+                            filename.clone(),
+                            "filename already exists in destination".to_string(),
+                        ));
+                        total_skipped_conflict += 1;
+                        continue;
+                    }
+
+                    println!(" - {}", filename);
                     total_moved += 1;
+                    move_cnt_for_this_dest += 1;
+
+                    // Track size in dry-run by querying metadata
+                    if let Ok(metadata) = fs::metadata(&from_path) {
+                        total_size_moved += metadata.len();
+                    }
                 }
                 // Actual file moving logic
                 else {
@@ -355,9 +380,6 @@ pub fn run() -> Result<()> {
                         }
                     }
 
-                    let from_path = target_folder_path.join(filename);
-                    let to_path = dest_dir.join(filename);
-
                     // Overwrite protection:
                     // skip moving file if the filename already exists in destination
                     if to_path.exists() {
@@ -365,37 +387,52 @@ pub fn run() -> Result<()> {
                             filename.clone(),
                             "filename already exists in destination".to_string(),
                         ));
+                        total_skipped_conflict += 1;
                         continue;
                     }
 
+                    // Get metadata for size tracking BEFORE moving
+                    let file_size = fs::metadata(&from_path).map(|m| m.len()).unwrap_or(0);
+
                     match fs::rename(&from_path, &to_path) {
                         Ok(_) => {
-                            println!(" ({}) {}", i + 1, filename);
+                            println!(" - {}", filename);
                             total_moved += 1;
+                            move_cnt_for_this_dest += 1;
+                            total_size_moved += file_size;
                         }
                         Err(e) => failed_files.push((filename.clone(), e.to_string())),
                     }
                 }
             }
-        }
-        println!(
-            "\nTotal files {}: {}",
-            if cli.dry_run { "to be moved" } else { "moved" },
-            total_moved
-        );
 
-        // show elapsed time only if at lease one file was actually moved
-        if !cli.dry_run && total_moved > 0 {
-            let elapsed_ms = now.elapsed();
-            println!("Total time taken: {}ms", elapsed_ms.as_millis());
+            println!("File count: {}", move_cnt_for_this_dest);
         }
+        let moving_elapsed_ms = move_start.elapsed().as_millis();
 
-        if !failed_files.is_empty() {
-            println!("\nErrors occurred for the following files:");
-            for (file, error) in failed_files {
-                println!(" - {}: {}", file, error);
-            }
-        }
+        // EXECUTION REPORT GENERATION
+
+        // total_skipepd => file that were skipped
+        // total_failed => any other errors
+        let total_failed = failed_files.len() - total_skipped_conflict;
+
+        let report = ExecutionReport {
+            target_dir: target_folder_path,
+            mode: mode.to_string(),
+            dry_run: cli.dry_run,
+            ignore_case: cli.ignore_case,
+            allow_hidden: cli.allow_hidden,
+            total_files_scanned,
+            total_matched,
+            total_moved,
+            total_skipped_conflict,
+            total_failed,
+            total_size_moved,
+            elapsed_ms: now.elapsed().as_millis(),
+            moving_elapsed_ms,
+            failed_files,
+        };
+        generate_execution_report(report);
     }
     // UNKNOWN OPERATION
     else {
