@@ -193,6 +193,7 @@ Just define the path (**relative to home**) for each regex pattern, and you're g
 | `--dry-run` | `-d` | Recommended: Preview matches without moving files. |
 | `--allow-hidden` | | Process files starting with '.'. Use with caution. |
 | `--ignore-case` | | Enable case-insensitive regex matching. |
+| `--file-list` | `-L` | Show the list of files being processed. |
 | `--pattern` | `-p` | Define a one-off regex pattern (bypasses config). |
 | `--dest` | `-t` | Define a one-off destination directory (used with -p). |
 

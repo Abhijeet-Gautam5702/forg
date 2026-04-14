@@ -59,6 +59,14 @@ struct Cli {
     )]
     ignore_case: bool,
 
+    #[arg(
+        short('L'),
+        long,
+        default_value_t = false,
+        help = "Show the list of files being processed"
+    )]
+    file_list: bool,
+
     #[arg(long, short('p'), requires = "dest", help = "Define a regex pattern")]
     pattern: Option<String>,
 
@@ -413,7 +421,9 @@ pub fn run() -> Result<()> {
             let mut move_cnt_for_this_dest = 0;
 
             println!("\nDestination Directory: {}", dest_dir.display());
-            println!("Files to be moved:");
+            if cli.file_list {
+                println!("Files to be moved:");
+            }
 
             for (_, filename) in filenames.iter().enumerate() {
                 let from_path = target_folder_path.join(filename);
@@ -430,7 +440,9 @@ pub fn run() -> Result<()> {
                         continue;
                     }
 
-                    println!(" - {}", filename);
+                    if cli.file_list {
+                        println!(" - {}", filename);
+                    }
                     total_moved += 1;
                     move_cnt_for_this_dest += 1;
 
@@ -465,7 +477,9 @@ pub fn run() -> Result<()> {
 
                     match fs::rename(&from_path, &to_path) {
                         Ok(_) => {
-                            println!(" - {}", filename);
+                            if cli.file_list {
+                                println!(" - {}", filename);
+                            }
                             total_moved += 1;
                             move_cnt_for_this_dest += 1;
                             total_size_moved += file_size;
