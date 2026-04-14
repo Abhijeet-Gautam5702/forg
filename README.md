@@ -20,6 +20,22 @@
 
 ---
 
+## Performance
+
+**forg** is engineered for extreme speed, achieving logical throughputs of over **10 GB/s** by leveraging atomic metadata operations.
+
+| Task | Total Files | Total Volume | Move Time |
+| :--- | :--- | :--- | :--- |
+| **Small Batch** | 5,000 | ~1 GB | **0.45s** |
+| **Large Batch** | 20,000 | ~20 GB | **2.02s** |
+
+> [!TIP]
+> **forg** is metadata-bound, not I/O-bound. This means organizing 1,000 files takes the same amount of time regardless of whether they are 1KB or 1GB each.
+> 
+> Check out the [detailed test environment here](./PERFORMANCE_TEST_RESULTS.md).
+
+---
+
 ## Installation
 
 To install/update **forg** using the installation script, run:
