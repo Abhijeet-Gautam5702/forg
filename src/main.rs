@@ -84,16 +84,26 @@ const DEFAULT_CONFIG: &str = include_str!("../default_config.json");
 const INSTALL_COMMAND: &str =
     "curl -sSL https://raw.githubusercontent.com/Abhijeet-Gautam5702/forg/main/install.sh | bash";
 
+use std::io::{stderr, IsTerminal};
+
 // MACROS
 macro_rules! report_err {
     ($($arg:tt)*) => {{
-        eprintln!("\x1b[31;1mERROR:\x1b[0m {}", format_args!($($arg)*));
+        if stderr().is_terminal() {
+            eprintln!("\x1b[31;1mERROR:\x1b[0m {}", format_args!($($arg)*));
+        } else {
+            eprintln!("ERROR: {}", format_args!($($arg)*));
+        }
     }};
 }
 
 macro_rules! report_note {
     ($($arg:tt)*) => {{
-        eprintln!("\x1b[33;1mNOTE:\x1b[0m {}", format_args!($($arg)*));
+        if stderr().is_terminal() {
+            eprintln!("\x1b[33;1mNOTE:\x1b[0m {}", format_args!($($arg)*));
+        } else {
+            eprintln!("NOTE: {}", format_args!($($arg)*));
+        }
     }};
 }
 

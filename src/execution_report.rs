@@ -1,7 +1,9 @@
+use std::io::{stdout, IsTerminal};
 use std::path::PathBuf;
 
 /// Struct to hold all the metrics and details of the execution.
 pub struct ExecutionReport {
+// ... rest of the struct (unchanged)
     pub target_dir: PathBuf,
     pub mode: String,
     pub dry_run: bool,
@@ -36,12 +38,14 @@ fn format_bytes(bytes: u64) -> String {
 }
 
 /// Generates and prints the execution report to the terminal.
-/// Uses bright green ANSI codes for highlighting values.
+/// Uses bright green ANSI codes for highlighting values only when output is a terminal.
 pub fn generate_execution_report(report: ExecutionReport) {
-    // let green = "\x1b[32;1m";
-    // let reset = "\x1b[0m";
-    let green = ""; // TODO: REMOVE AFTER TESTING
-    let reset = ""; // TODO: REMOVE AFTER TESTING
+    let use_color = stdout().is_terminal();
+    let (green, reset) = if use_color {
+        ("\x1b[32;1m", "\x1b[0m")
+    } else {
+        ("", "")
+    };
 
     println!("\n-----------EXECUTION REPORT-----------");
 
