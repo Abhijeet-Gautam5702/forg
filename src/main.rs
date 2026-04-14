@@ -20,6 +20,11 @@ enum SubCommand {
     SelfUpdate,
 }
 
+enum ExecutionMode {
+    ConfigBypass,
+    ConfigBased,
+}
+
 #[derive(Parser)]
 #[command(name = "forg")]
 #[command(version)]
@@ -84,7 +89,7 @@ const DEFAULT_CONFIG: &str = include_str!("../default_config.json");
 const INSTALL_COMMAND: &str =
     "curl -sSL https://raw.githubusercontent.com/Abhijeet-Gautam5702/forg/main/install.sh | bash";
 
-use std::io::{stderr, IsTerminal};
+use std::io::{IsTerminal, stderr};
 
 // MACROS
 macro_rules! report_err {
@@ -208,26 +213,30 @@ pub fn run() -> Result<()> {
             ));
         }
 
+        let execution_mode = if cli.pattern.is_some() && cli.dest.is_some() {
+            ExecutionMode::ConfigBypass
+        } else {
+            ExecutionMode::ConfigBased
+        };
+
         // Print Execution Modes & Options (UX)
         println!("------------------------------------------------------------------");
-        let mode = if cli.pattern.is_some() && cli.dest.is_some() {
-            "On-The-Fly"
-        } else {
-            "Complete"
-        };
         println!("EXECUTION MODE:");
-        if cli.pattern.is_some() && cli.dest.is_some() {
-            println!(
-                " - {}: This will bypass the config.json and use the pattern & destination provided by the user.",
-                mode
-            );
-        } else {
-            println!(
-                " - {}: This will use the configuration defined in {}",
-                mode,
-                config_path.display()
-            );
-        }
+        let mode: String = match execution_mode {
+            ExecutionMode::ConfigBypass => {
+                println!(
+                    " - On-The-Fly: This will bypass the config.json and use the pattern & destination provided by the user."
+                );
+                "On-The-Fly".to_string()
+            }
+            ExecutionMode::ConfigBased => {
+                println!(
+                    " - Complete: This will use the configuration defined in {}",
+                    config_path.display()
+                );
+                "Complete".to_string()
+            }
+        };
 
         let mut enabled_options = Vec::new();
         if cli.dry_run {
@@ -258,8 +267,57 @@ pub fn run() -> Result<()> {
 
         let mut rules: Vec<(Regex, PathBuf)> = Vec::new();
 
-        // ON-THE-FLY MODE
-        if let (Some(p), Some(d)) = (&cli.pattern, &cli.dest) {
+        match execution_mode {
+            // ON-THE-FLY MODE
+            ExecutionMode::ConfigBypass => {
+                let d = &cli.dest.unwrap();
+                let p = &cli.pattern.unwrap();
+                let dest_folder_path = home.join(d);
+                let pattern_regex = RegexBuilder::new(p)
+                    .case_insensitive(cli.ignore_case)
+                    .build()
+                    .map_err(|e| {
+                        Error::new(
+                            ErrorKind::InvalidInput,
+                            format!("Invalid regex '{}': {}", p, e),
+                        )
+                    })?;
+                rules.push((pattern_regex, dest_folder_path));
+            }
+            // COMPLETE EXECUTION MODE (CONFIG-BASED)
+            ExecutionMode::ConfigBased => {
+                if !config_path.exists() {
+                    return Err(Error::new(
+                        ErrorKind::NotFound,
+                        "No config.json found. Run 'forg init' first.",
+                    ));
+                }
+
+                // Read and parse config
+                let config_data_str = fs::read_to_string(&config_path)?;
+                let config_json: Vec<ConfigItem> =
+                    serde_json::from_str(&config_data_str).map_err(|e| {
+                        Error::new(ErrorKind::InvalidData, format!("Config parse error: {}", e))
+                    })?;
+
+                for config_item in &config_json {
+                    let dest_folder_path = home.join(&config_item.path);
+                    let pattern_regex = RegexBuilder::new(&config_item.pattern)
+                        .case_insensitive(cli.ignore_case)
+                        .build()
+                        .map_err(|e| {
+                            Error::new(
+                                ErrorKind::InvalidInput,
+                                format!("Invalid regex '{}': {}", config_item.pattern, e),
+                            )
+                        })?;
+                    rules.push((pattern_regex, dest_folder_path));
+                }
+            }
+        }
+
+        /*
+        if ExecutionMode::ConfigBypass == execution_mode {
             let dest_folder_path = home.join(d);
             let pattern_regex = RegexBuilder::new(p)
                 .case_insensitive(cli.ignore_case)
@@ -303,6 +361,7 @@ pub fn run() -> Result<()> {
                 rules.push((pattern_regex, dest_folder_path));
             }
         }
+        */
 
         // Initialize report metrics
         let mut total_files_scanned = 0;
