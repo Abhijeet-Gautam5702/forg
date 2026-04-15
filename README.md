@@ -1,6 +1,6 @@
 # 🦀 forg
 
-[![Version](https://img.shields.io/badge/Version-2.0.1-blue.svg)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-2.1.0-blue.svg)](./CHANGELOG.md)
 [![Changelog](https://img.shields.io/badge/Changelog-latest-green.svg)](./CHANGELOG.md)
 
 **forg** is a high-performance, regex-powered file organization CLI tool built in Rust. It automates the tedious task of sorting files into designated directories based on custom pattern-matching rules, ensuring your workspace remains clean and structured.
