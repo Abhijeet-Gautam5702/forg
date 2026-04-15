@@ -1,10 +1,10 @@
 use clap::{Parser, Subcommand};
-use regex::{Regex, RegexBuilder};
+use regex::{Regex, RegexBuilder, RegexSetBuilder};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
     env, fs,
-    io::{Error, ErrorKind, Result},
+    io::{Error, ErrorKind, IsTerminal, Result, stderr},
     path::PathBuf,
     process::{self, Command},
     time::Instant,
@@ -93,11 +93,10 @@ struct ConfigItem {
 // as rust compiler doesn't bundle the file with the binary
 // so we embed the file contents into DEFAULT_CONFIG at compile time
 const DEFAULT_CONFIG: &str = include_str!("../default_config.json");
+const DEFAULT_IGNORE: &str = include_str!("../default_ignore.json");
 
 const INSTALL_COMMAND: &str =
     "curl -sSL https://raw.githubusercontent.com/Abhijeet-Gautam5702/forg/main/install.sh | bash";
-
-use std::io::{IsTerminal, stderr};
 
 // MACROS
 macro_rules! report_err {
@@ -119,6 +118,15 @@ macro_rules! report_note {
         }
     }};
 }
+macro_rules! warn {
+    ($($arg:tt)*) => {{
+        if stderr().is_terminal() {
+            eprintln!("\x1b[33;1m{}\x1b[0m", format_args!($($arg)*));
+        } else {
+            eprintln!("{}", format_args!($($arg)*));
+        }
+    }};
+}
 
 pub fn run() -> Result<()> {
     let version = env!("CARGO_PKG_VERSION");
@@ -131,6 +139,7 @@ pub fn run() -> Result<()> {
     let mut forg_dir_path = home.clone();
     forg_dir_path.push(".forg");
     let config_path = forg_dir_path.join("config.json");
+    let ignore_path = forg_dir_path.join(".ignore.json");
 
     // SUB COMMANDS
     if let Some(sub_c) = cli.sub_command {
@@ -143,12 +152,19 @@ pub fn run() -> Result<()> {
 
                 if !config_path.exists() {
                     fs::write(&config_path, DEFAULT_CONFIG)?;
-                    println!("Config created at {}\n", config_path.display());
-                    report_note!(
-                        "Files will be moved to standard folders like ~/Pictures, ~/Documents, etc. (as defined in {})",
+
+                    if !ignore_path.exists() {
+                        println!("\nCreating .ignore.json...");
+                        fs::write(&ignore_path, DEFAULT_IGNORE)?;
+                        println!(".ignore.json created: {}", ignore_path.display());
+                        warn!(
+                            "\nIMPORTANT:\n.ignore.json defines regex patterns for files that must never be touched while file-moving operation.\nBe careful while editing it!\n"
+                        )
+                    }
+                    println!(
+                        "config.json created: {}\nEdit to customise your rules.",
                         config_path.display()
                     );
-                    println!("You can edit the config.json to customize your rules")
                 } else {
                     println!("Already initialised at {}", config_path.display());
                 }
@@ -273,10 +289,10 @@ pub fn run() -> Result<()> {
         }
         println!("------------------------------------------------------------------");
 
+        // Initialise Rules (regex objects)
         let mut rules: Vec<(Regex, PathBuf)> = Vec::new();
-
         match execution_mode {
-            // ON-THE-FLY MODE
+            // RULES: ON-THE-FLY MODE
             ExecutionMode::ConfigBypass => {
                 let d = &cli.dest.unwrap();
                 let p = &cli.pattern.unwrap();
@@ -292,7 +308,7 @@ pub fn run() -> Result<()> {
                     })?;
                 rules.push((pattern_regex, dest_folder_path));
             }
-            // COMPLETE EXECUTION MODE (CONFIG-BASED)
+            // RULES: COMPLETE EXECUTION MODE (CONFIG-BASED)
             ExecutionMode::ConfigBased => {
                 if !config_path.exists() {
                     return Err(Error::new(
@@ -324,57 +340,29 @@ pub fn run() -> Result<()> {
             }
         }
 
-        /*
-        if ExecutionMode::ConfigBypass == execution_mode {
-            let dest_folder_path = home.join(d);
-            let pattern_regex = RegexBuilder::new(p)
+        // Initialize report metrics
+        let mut total_files_scanned = 0;
+        let mut total_matched = 0;
+        let mut total_size_moved = 0;
+
+        // FILE EXCLUSION LOGIC
+        // load the regex set of files to be ignored
+        let mut ignore_set = None;
+        if ignore_path.exists() {
+            let ignore_json_data_str = fs::read_to_string(&ignore_path)?;
+            let ignore_json: Vec<String> = serde_json::from_str(&ignore_json_data_str)
+                .map_err(|e| Error::new(ErrorKind::InvalidData, format!("Parse Error: {}", e)))?;
+            let set = RegexSetBuilder::new(&ignore_json)
                 .case_insensitive(cli.ignore_case)
                 .build()
                 .map_err(|e| {
                     Error::new(
                         ErrorKind::InvalidInput,
-                        format!("Invalid regex '{}': {}", p, e),
+                        format!("Invalid regex in .ignore.json: {}", e),
                     )
                 })?;
-            rules.push((pattern_regex, dest_folder_path));
+            ignore_set = Some(set);
         }
-        // COMPLETE EXECUTION MODE
-        // works on all the rules (pattern & destination path) provided in config.json
-        else {
-            if !config_path.exists() {
-                return Err(Error::new(
-                    ErrorKind::NotFound,
-                    "No config.json found. Run 'forg init' first.",
-                ));
-            }
-
-            // Read and parse config
-            let config_data_str = fs::read_to_string(&config_path)?;
-            let config_json: Vec<ConfigItem> =
-                serde_json::from_str(&config_data_str).map_err(|e| {
-                    Error::new(ErrorKind::InvalidData, format!("Config parse error: {}", e))
-                })?;
-
-            for config_item in &config_json {
-                let dest_folder_path = home.join(&config_item.path);
-                let pattern_regex = RegexBuilder::new(&config_item.pattern)
-                    .case_insensitive(cli.ignore_case)
-                    .build()
-                    .map_err(|e| {
-                        Error::new(
-                            ErrorKind::InvalidInput,
-                            format!("Invalid regex '{}': {}", config_item.pattern, e),
-                        )
-                    })?;
-                rules.push((pattern_regex, dest_folder_path));
-            }
-        }
-        */
-
-        // Initialize report metrics
-        let mut total_files_scanned = 0;
-        let mut total_matched = 0;
-        let mut total_size_moved = 0;
 
         // FILE GROUPING LOGIC
         // group the files into directories they're to be organised into
@@ -386,6 +374,13 @@ pub fn run() -> Result<()> {
             if entry.file_type()?.is_file() {
                 total_files_scanned += 1;
                 if let Some(filename_str) = entry.file_name().to_str() {
+                    // Skip ignored files (from .ignore.json)
+                    if let Some(set) = &ignore_set {
+                        if set.is_match(filename_str) {
+                            continue;
+                        }
+                    }
+
                     // Skip hidden files if not allowed
                     if !cli.allow_hidden && filename_str.starts_with('.') {
                         continue;
