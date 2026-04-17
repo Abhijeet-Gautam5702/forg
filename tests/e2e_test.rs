@@ -38,12 +38,14 @@ fn test_complete_workflow() -> Result<(), Box<dyn std::error::Error>> {
     init_cmd
         .assert()
         .success()
-        .stdout(predicate::str::contains("Config created at"));
+        .stdout(predicate::str::contains("config.json created"))
+        .stdout(predicate::str::contains(".ignore.json created"));
 
     let mut execution_cmd = Command::cargo_bin("forg")?;
     execution_cmd
         .env("HOME", home_path)
         .arg("Downloads")
+        .arg("-L")
         .arg("--ignore-case");
     execution_cmd
         .assert()

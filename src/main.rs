@@ -1,17 +1,19 @@
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use regex::{Regex, RegexBuilder, RegexSetBuilder};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
     env, fs,
     io::{Error, ErrorKind, IsTerminal, Result, stderr},
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{self, Command},
     time::Instant,
 };
 
 mod execution_report;
 use execution_report::{ExecutionReport, generate_execution_report};
+
+mod history;
 
 #[derive(Subcommand)]
 enum SubCommand {
@@ -23,6 +25,14 @@ enum SubCommand {
 enum ExecutionMode {
     ConfigBypass,
     ConfigBased,
+}
+
+#[derive(ValueEnum, Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+enum OnConflictOperation {
+    Skip,
+    Replace,
+    Versioned,
 }
 
 #[derive(Parser)]
@@ -66,6 +76,15 @@ struct Cli {
         help = "Show the list of files being processed"
     )]
     file_list: bool,
+
+    #[arg(
+        short('c'),
+        long,
+        value_enum,
+        default_value_t = OnConflictOperation::Skip,
+        help = "How to handle name conflicts while moving files to the destination directory"
+    )]
+    on_conflict: OnConflictOperation,
 
     #[arg(long, short('p'), requires = "dest", help = "Define a regex pattern")]
     pattern: Option<String>,
@@ -126,6 +145,58 @@ macro_rules! warn {
             eprintln!("{}", format_args!($($arg)*));
         }
     }};
+}
+
+/// Handles file naming in case of conflict by versioning it.
+/// Logic: sample_txt_v23.md -> sample_txt_v24.md
+/// It looks for '_v' followed by digits at the end of the file stem.
+/// If not found, it appends '_v1'.
+pub fn get_versioned_name(filename: &str) -> String {
+
+    let path = Path::new(filename);
+    let filename_wo_extension = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+    let extension = path.extension().and_then(|s| s.to_str()).unwrap_or("");
+
+    // Traverse the filename from the end until '_v' is found
+    if let Some(v_index) = filename_wo_extension.rfind("_v") {
+        // version_part for sample_variable_v12.txt will be '12'
+        let version_part = &filename_wo_extension[v_index + 2..];
+        // If '_v' is followed by digits till the end, then increment the version
+        if !version_part.is_empty() && version_part.chars().all(|c| c.is_ascii_digit()) {
+            if let Ok(version) = version_part.parse::<u32>() {
+                let versioned_filename_wo_extension =
+                    format!("{}_v{}", &filename_wo_extension[..v_index], version + 1);
+                return if extension.is_empty() {
+                    versioned_filename_wo_extension
+                } else {
+                    format!("{}.{}", versioned_filename_wo_extension, extension)
+                };
+            }
+        }
+    }
+
+    // Otherwise, simply add '_v1' at the end of the filename (before extension).
+    let versioned_filename_wo_extension = format!("{}_v1", filename_wo_extension);
+    if extension.is_empty() {
+        versioned_filename_wo_extension
+    } else {
+        format!("{}.{}", versioned_filename_wo_extension, extension)
+    }
+}
+
+/// Handles the 'replace' conflict resolution by backing up the existing file.
+/// Logic: Check if [filename].bak is present: YES => delete it.
+/// Then rename the existing file to [filename].bak.
+pub fn handle_replace_conflict(to_path: &Path) -> Result<()> {
+    let mut bak_path_str = to_path.to_string_lossy().to_string();
+    bak_path_str.push_str(".bak");
+    let bak_path = PathBuf::from(bak_path_str);
+
+    if bak_path.exists() {
+        fs::remove_file(&bak_path)?;
+    }
+    fs::rename(to_path, &bak_path)?;
+    Ok(())
 }
 
 pub fn run() -> Result<()> {
@@ -272,6 +343,9 @@ pub fn run() -> Result<()> {
         if cli.allow_hidden {
             enabled_options.push("Allow-hidden");
         }
+        if cli.on_conflict != OnConflictOperation::Skip {
+            enabled_options.push("On-conflict");
+        }
 
         if !enabled_options.is_empty() {
             println!("\nOPTIONS ENABLED:");
@@ -285,6 +359,17 @@ pub fn run() -> Result<()> {
                 println!(
                     " - Allow-hidden: Hidden files (starting with '.') will also be processed."
                 );
+            }
+            match cli.on_conflict {
+                OnConflictOperation::Replace => {
+                    println!(
+                        " - On-conflict: Replace existing files in destination (with .bak backup of the original file)"
+                    );
+                }
+                OnConflictOperation::Versioned => {
+                    println!(" - On-conflict: Create versioned filename (e.g. _v2) on conflict");
+                }
+                OnConflictOperation::Skip => {}
             }
         }
         println!("------------------------------------------------------------------");
@@ -422,20 +507,34 @@ pub fn run() -> Result<()> {
 
             for (_, filename) in filenames.iter().enumerate() {
                 let from_path = target_folder_path.join(filename);
-                let to_path = dest_dir.join(filename);
+                let mut to_path = dest_dir.join(filename);
+                let mut final_filename = filename.clone();
 
                 if cli.dry_run {
                     // DRY-RUN MODE:
                     if to_path.exists() {
-                        failed_files.push((
-                            filename.clone(),
-                            "filename already exists in destination".to_string(),
-                        ));
-                        total_skipped_conflict += 1;
-                        continue;
-                    }
-
-                    if cli.file_list {
+                        match cli.on_conflict {
+                            OnConflictOperation::Skip => {
+                                failed_files.push((
+                                    filename.clone(),
+                                    "filename already exists in destination (skipped)".to_string(),
+                                ));
+                                total_skipped_conflict += 1;
+                                continue;
+                            }
+                            OnConflictOperation::Replace => {
+                                if cli.file_list {
+                                    println!(" - {} (REPLACES existing)", filename);
+                                }
+                            }
+                            OnConflictOperation::Versioned => {
+                                final_filename = get_versioned_name(filename);
+                                if cli.file_list {
+                                    println!(" - {} (VERSIONED as {})", filename, final_filename);
+                                }
+                            }
+                        }
+                    } else if cli.file_list {
                         println!(" - {}", filename);
                     }
                     total_moved += 1;
@@ -456,15 +555,35 @@ pub fn run() -> Result<()> {
                         }
                     }
 
-                    // Overwrite protection:
-                    // skip moving file if the filename already exists in destination
+                    // Overwrite protection & Conflict Handling:
                     if to_path.exists() {
-                        failed_files.push((
-                            filename.clone(),
-                            "filename already exists in destination".to_string(),
-                        ));
-                        total_skipped_conflict += 1;
-                        continue;
+                        match cli.on_conflict {
+                            OnConflictOperation::Skip => {
+                                failed_files.push((
+                                    filename.clone(),
+                                    "filename already exists in destination".to_string(),
+                                ));
+                                total_skipped_conflict += 1;
+                                continue;
+                            }
+                            OnConflictOperation::Replace => {
+                                // Logic for replace:
+                                // Check if [filename].bak is present: YES => delete it.
+                                // Then rename the existing file to [filename].bak.
+                                if let Err(e) = handle_replace_conflict(&to_path) {
+                                    failed_files.push((
+                                        filename.clone(),
+                                        format!("Failed to handle conflict (replace): {}", e),
+                                    ));
+                                    continue;
+                                }
+                            }
+                            OnConflictOperation::Versioned => {
+                                // rename the current file as the next version according to the destination filename
+                                final_filename = get_versioned_name(filename);
+                                to_path = dest_dir.join(&final_filename);
+                            }
+                        }
                     }
 
                     // Get metadata for size tracking BEFORE moving
@@ -473,7 +592,11 @@ pub fn run() -> Result<()> {
                     match fs::rename(&from_path, &to_path) {
                         Ok(_) => {
                             if cli.file_list {
-                                println!(" - {}", filename);
+                                if final_filename != *filename {
+                                    println!(" - {} -> {}", filename, final_filename);
+                                } else {
+                                    println!(" - {}", filename);
+                                }
                             }
                             total_moved += 1;
                             move_cnt_for_this_dest += 1;
@@ -497,6 +620,7 @@ pub fn run() -> Result<()> {
         let report = ExecutionReport {
             target_dir: target_folder_path,
             mode: mode.to_string(),
+            on_conflict: format!("{:?}", cli.on_conflict).to_lowercase(),
             dry_run: cli.dry_run,
             ignore_case: cli.ignore_case,
             allow_hidden: cli.allow_hidden,

@@ -6,6 +6,7 @@ pub struct ExecutionReport {
 // ... rest of the struct (unchanged)
     pub target_dir: PathBuf,
     pub mode: String,
+    pub on_conflict: String,
     pub dry_run: bool,
     pub ignore_case: bool,
     pub allow_hidden: bool,
@@ -58,8 +59,8 @@ pub fn generate_execution_report(report: ExecutionReport) {
     );
     println!("Execution Mode: {}{}{}", green, report.mode, reset);
     println!(
-        "Flags: {}dry-run={}, ignore-case={}, allow-hidden={}{}",
-        green, report.dry_run, report.ignore_case, report.allow_hidden, reset
+        "Flags: {}on-conflict={}, dry-run={}, ignore-case={}, allow-hidden={}{}",
+        green, report.on_conflict, report.dry_run, report.ignore_case, report.allow_hidden, reset
     );
 
     println!("\n--- Summary ---");
