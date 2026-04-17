@@ -1,6 +1,12 @@
 #!/bin/bash
 set -e
 
+# Analytics setup (early check for new install)
+IS_NEW_INSTALL=false
+if ! command -v forg >/dev/null 2>&1; then
+    IS_NEW_INSTALL=true
+fi
+
 # Constants
 REPO="Abhijeet-Gautam5702/forg"
 BINARY_NAME="forg"
@@ -77,9 +83,11 @@ echo "Installed to $INSTALL_DIR/$BINARY_NAME"
 echo ""
 echo "Verifying installation..."
 
+INSTALLATION_SUCCESS=false
 if command -v forg >/dev/null 2>&1; then
   echo "forg v$LATEST_VERSION Installation successful!"
   echo "Run: forg --help"
+  INSTALLATION_SUCCESS=true
 else
   echo "[ERROR] 'forg' is not in your PATH"
 
@@ -120,4 +128,41 @@ else
 
   echo ""
   echo "After updating PATH, restart your terminal or source your config file."
+fi
+
+# --- POSTHOG ANALYTICS ---
+POSTHOG_PROJECT_KEY="phc_BhYzF5XGyASH4h5nVLkhuxPMSW7DUFoyz4mgtQ59Qr3P"
+POSTHOG_API_HOST="https://eu.i.posthog.com"
+
+if [[ "$INSTALLATION_SUCCESS" == "true" && "$IS_NEW_INSTALL" == "true" && -z "$DO_NOT_TRACK" ]]; then
+    (
+        FORG_DIR="$HOME/.forg"
+        mkdir -p "$FORG_DIR"
+        UID_FILE="$FORG_DIR/.uid"
+
+        if [ ! -f "$UID_FILE" ]; then
+            if command -v uuidgen >/dev/null 2>&1; then
+                uuidgen > "$UID_FILE"
+            else
+                LC_ALL=C tr -dc 'a-zA-Z0-9' < /dev/urandom | fold -w 32 | head -n 1 > "$UID_FILE"
+            fi
+        fi
+
+        USER_ID=$(cat "$UID_FILE")
+        
+        curl -s -X POST "$POSTHOG_API_HOST/capture/" \
+            -H "Content-Type: application/json" \
+            -d "{
+                \"api_key\": \"$POSTHOG_PROJECT_KEY\",
+                \"event\": \"install_completed\",
+                \"distinct_id\": \"$USER_ID\",
+                \"properties\": {
+                    \"os\": \"$OS\",
+                    \"arch\": \"$ARCH\",
+                    \"version\": \"$LATEST_VERSION\",
+                    \"binary_name\": \"$BINARY_NAME\",
+                    \"source\": \"manual_script\"
+                }
+            }" > /dev/null 2>&1
+    ) &
 fi
