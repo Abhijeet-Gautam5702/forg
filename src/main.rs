@@ -13,8 +13,6 @@ use std::{
 mod execution_report;
 use execution_report::{ExecutionReport, generate_execution_report};
 
-mod history;
-
 #[derive(Subcommand)]
 enum SubCommand {
     Init,
@@ -152,7 +150,6 @@ macro_rules! warn {
 /// It looks for '_v' followed by digits at the end of the file stem.
 /// If not found, it appends '_v1'.
 pub fn get_versioned_name(filename: &str) -> String {
-
     let path = Path::new(filename);
     let filename_wo_extension = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
     let extension = path.extension().and_then(|s| s.to_str()).unwrap_or("");
