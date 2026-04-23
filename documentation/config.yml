@@ -1,0 +1,27 @@
+title: forg
+description: A high-performance, regex-powered file organization tool.
+base_path: null
+# navbar_logo: verdocs-logo.png
+# favicon: verdocs-logo.png
+theme:
+  primary_color: "#ec0000"
+  background_color: "#ffffff"
+  text_color: "#333333"
+  colors:
+    important: "#fd7e14"
+    tip: "#28a745"
+    danger: "#dc3545"
+    note: "#17a2b8"
+    warn: "#ffc107"
+    error: "#bd2130"
+dark_theme:
+  primary_color: "#db0000"
+  background_color: "#0d1117"
+  text_color: "#c9d1d9"
+  colors:
+    important: "#db6d28"
+    note: "#388bfd"
+    warn: "#d29922"
+    error: "#da3633"
+    tip: "#2ea043"
+    danger: "#f85149"
