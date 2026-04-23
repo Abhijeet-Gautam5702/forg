@@ -1,4 +1,7 @@
 # Changelog
+## v2.2.0
+### Added
+- New `--on-conflict` flag: Decide operation in case of filename conflicts (skip/versioned-name/overwrite)
 
 ## v2.1.0
 ### Added
