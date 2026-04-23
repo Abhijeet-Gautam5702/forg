@@ -1,6 +1,6 @@
 title: forg
 description: A high-performance, regex-powered file organization tool.
-base_path: forg
+base_path: /forg/
 # navbar_logo: verdocs-logo.png
 # favicon: verdocs-logo.png
 theme:
