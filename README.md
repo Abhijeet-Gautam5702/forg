@@ -1,6 +1,6 @@
 # 🦀 forg
 
-[![Version](https://img.shields.io/badge/Version-2.1.0-blue.svg)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-2.2.0-blue.svg)](./CHANGELOG.md)
 [![Changelog](https://img.shields.io/badge/Changelog-latest-green.svg)](./CHANGELOG.md)
 
 **forg** is a high-performance, regex-powered file organization CLI tool built in Rust. It automates the tedious task of sorting files into designated directories based on custom pattern-matching rules, ensuring your workspace remains clean and structured.
@@ -13,7 +13,10 @@
 - **Priority-Based Sorting**: Rules are processed in the order they appear in your config (the first match wins).
 - **Safety First**: 
   - **Dry Run Mode**: Preview exactly what will happen before moving a single byte.
-  - **Overwrite Protection**: Never lose data; forg refuses to overwrite existing files in the destination.
+  - **Conflict Resolution**: Choose how to handle name collisions using `--on-conflict`:
+    - **Skip** (default): Never lose data; **forg** refuses to overwrite existing files.
+    - **Replace**: Overwrites the destination file but creates a `.bak` backup of the original.
+    - **Versioned**: Automatically renames the incoming file (e.g., `image_v2.png`) to avoid conflicts.
   - **Hidden File Guard**: System and hidden files (starting with '.') are ignored by default.
 - **Auto-Directory Creation**: Missing destination folders are created on-the-fly only when a match is found.
 - **Optimized Execution**: Regex patterns are pre-compiled once to ensure maximum throughput even in directories with thousands of files.
@@ -133,6 +136,9 @@ forg Downloads --dry-run
 
 # Execute (actually move files)
 forg Downloads
+
+# Execute and auto-version files if they already exist in destination
+forg Downloads --on-conflict versioned
 ```
 > **Note:** By default, `target_dir` (here, 'Downloads') directory is relative to the home directory.
 
@@ -191,6 +197,7 @@ Just define the path (**relative to home**) for each regex pattern, and you're g
 | :--- | :--- | :--- |
 | `[TARGET_DIR]` | | Positional: Organise files in the specified directory (**relative to home**). |
 | `--dry-run` | `-d` | Recommended: Preview matches without moving files. |
+| `--on-conflict`| `-c` | Handle name conflicts: `skip` (default), `replace`, or `versioned`. |
 | `--allow-hidden` | | Process files starting with '.'. Use with caution. |
 | `--ignore-case` | | Enable case-insensitive regex matching. |
 | `--file-list` | `-L` | Show the list of files being processed. |
