@@ -2,8 +2,6 @@
 
 **forg** is a high-performance, regex-powered file organization CLI tool built in Rust. It automates the tedious task of sorting files into designated directories based on custom pattern-matching rules, ensuring your workspace remains clean and structured.
 
-![forg logo](../../assets/verdocs-logo.png)
-
 ### Why forg?
 
 In a world where digital clutter accumulates in seconds, **forg** offers a surgical approach to file management. Whether you're a developer with a messy Downloads folder or a photographer organizing thousands of assets, **forg** provides the speed and flexibility you need.
