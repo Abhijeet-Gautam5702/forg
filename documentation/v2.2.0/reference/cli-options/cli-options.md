@@ -25,7 +25,6 @@ A complete guide to every command and flag available in **forg**.
 | `--allow-hidden` | | Process files starting with `.`. | `false` |
 | `--ignore-case` | | Make regex matching case-insensitive. | `false` |
 | `--file-list` | `-L` | Show real-time transformation mapping (e.g., `old -> new`) as files are processed. | `false` |
-
 | `--pattern` | `-p` | Define a one-off regex pattern (requires `-t`). | N/A |
 | `--dest` | `-t` | Define a one-off destination directory (requires `-p`). | N/A |
 | `--help` | `-h` | Print help information. | N/A |
